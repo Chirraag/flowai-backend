@@ -35,7 +35,6 @@ class AuthService {
         hasSecret: !!REDOX_CONFIG.clientSecret,
         timestamp: new Date().toISOString()
       });
-
       const requestBody = {
         apiKey: REDOX_CONFIG.clientId,
         secret: REDOX_CONFIG.clientSecret
@@ -71,12 +70,6 @@ class AuthService {
       });
 
       this.accessToken = response.data.accessToken;
-      this.tokenExpiry = Date.now() + (response.data.expiresIn * 1000);
-      
-      logger.info('Access token cached successfully', {
-        expiresIn: response.data.expiresIn,
-        expiryTime: new Date(this.tokenExpiry).toISOString()
-      });
       
       return this.accessToken;
     } catch (error) {
