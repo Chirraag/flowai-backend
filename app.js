@@ -12,7 +12,6 @@ const patientRoutes = require('./routes/patient');
 const patientCreateRoutes = require('./routes/patientCreate');
 const slotRoutes = require('./routes/slot');
 const appointmentRoutes = require('./routes/appointment');
-const retellRoutes = require('./routes/retell');
 const retellWebhookRoutes = require('./routes/retellWebhook');
 
 const app = express();
@@ -125,7 +124,6 @@ app.use('/api/v1/patient', patientRoutes);
 app.use('/api/v1/patient', patientCreateRoutes);
 app.use('/api/v1/slot', slotRoutes);
 app.use('/api/v1/appointment', appointmentRoutes);
-app.use('/api/v1/retell', retellRoutes);
 app.use('/api/v1/retell', retellWebhookRoutes);
 
 // Error handling
@@ -146,7 +144,6 @@ app.use('*', (req, res) => {
       '/api/v1/appointment/create',
       '/api/v1/appointment/update',
       '/api/v1/appointment/search',
-      '/api/v1/retell/event',
       '/api/v1/retell/webhook',
       '/api/v1/retell/function-call'
     ]
