@@ -34,10 +34,19 @@ const authService = new AuthService();
  */
 router.post('/webhook', async (req, res, next) => {
   try {
+    // Log complete webhook request body
+    logger.info('=== RETELL WEBHOOK RECEIVED ===', {
+      requestBody: JSON.stringify(req.body, null, 2),
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
+
     const { call_inbound } = req.body;
     
     if (!call_inbound || !call_inbound.from_number) {
-      logger.warn('Retell webhook failed: missing call_inbound or from_number');
+      logger.warn('Retell webhook failed: missing call_inbound or from_number', {
+        receivedBody: req.body
+      });
       return res.status(400).json({
         success: false,
         error: 'Missing call_inbound.from_number in request'
@@ -45,7 +54,10 @@ router.post('/webhook', async (req, res, next) => {
     }
 
     const { from_number } = call_inbound;
-    logger.info('Retell webhook - call inbound', { from_number });
+    logger.info('Retell webhook - call inbound processed', { 
+      from_number,
+      call_inbound: call_inbound 
+    });
 
     // Get access token
     const accessToken = await authService.getAccessToken();
@@ -101,6 +113,12 @@ router.post('/webhook', async (req, res, next) => {
       appointmentFound: appointments.length > 0 
     });
 
+    // Log complete webhook response
+    logger.info('=== RETELL WEBHOOK RESPONSE ===', {
+      responseBody: JSON.stringify(retellResponse, null, 2),
+      timestamp: new Date().toISOString()
+    });
+
     res.json(retellResponse);
   } catch (error) {
     logger.error('Retell webhook error', { error: error.message });
@@ -144,16 +162,27 @@ router.post('/webhook', async (req, res, next) => {
  */
 router.post('/function-call', async (req, res, next) => {
   try {
+    // Log complete function call request body
+    logger.info('=== RETELL FUNCTION CALL RECEIVED ===', {
+      requestBody: JSON.stringify(req.body, null, 2),
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
+
     const { call, name, args } = req.body;
     
-    logger.info('Retell function call received', { 
+    logger.info('Retell function call processed', { 
       functionName: name,
       hasArgs: !!args,
-      hasCall: !!call
+      hasCall: !!call,
+      args: args,
+      call: call
     });
 
     if (!name || !args) {
-      logger.warn('Retell function call failed: missing name or args');
+      logger.warn('Retell function call failed: missing name or args', {
+        receivedBody: req.body
+      });
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: name and args'
@@ -255,12 +284,21 @@ router.post('/function-call', async (req, res, next) => {
         });
     }
 
-    logger.info('Retell function call completed', { functionName: name });
-    res.json({
+    const functionResponse = {
       success: true,
       function: name,
       result: result
+    };
+
+    logger.info('Retell function call completed', { functionName: name });
+    
+    // Log complete function call response
+    logger.info('=== RETELL FUNCTION CALL RESPONSE ===', {
+      responseBody: JSON.stringify(functionResponse, null, 2),
+      timestamp: new Date().toISOString()
     });
+
+    res.json(functionResponse);
 
   } catch (error) {
     logger.error('Retell function call error', { error: error.message, functionName: name });

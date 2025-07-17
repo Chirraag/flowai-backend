@@ -4,9 +4,15 @@ const logger = require('../utils/logger');
 
 class RedoxAPIService {
   static async makeRequest(method, endpoint, data = null, params = null, accessToken) {
-    logger.info(`Making Redox API request: ${method} ${endpoint}`, {
+    // Enhanced logging for Redox API calls
+    logger.info('=== REDOX API REQUEST START ===', {
+      method: method,
+      endpoint: endpoint,
+      fullUrl: `${REDOX_CONFIG.baseURL}${endpoint}`,
       hasData: !!data,
-      hasParams: !!params
+      hasParams: !!params,
+      accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : 'none',
+      timestamp: new Date().toISOString()
     });
     
     // Log request data for debugging
@@ -50,19 +56,54 @@ class RedoxAPIService {
       }
     }
 
+    // Log complete request configuration
+    logger.info('=== REDOX API REQUEST CONFIG ===', {
+      config: {
+        method: config.method,
+        url: config.url,
+        headers: {
+          ...config.headers,
+          'Authorization': config.headers['Authorization'] ? `Bearer ${config.headers['Authorization'].substring(7, 27)}...` : 'none'
+        },
+        hasData: !!config.data,
+        dataPreview: config.data ? (typeof config.data === 'string' ? config.data.substring(0, 200) : JSON.stringify(config.data).substring(0, 200)) : null
+      },
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const response = await axios(config);
-      logger.info(`Redox API request successful: ${method} ${endpoint}`, {
+      
+      // Enhanced response logging
+      logger.info('=== REDOX API RESPONSE SUCCESS ===', {
+        method: method,
+        endpoint: endpoint,
         status: response.status,
-        dataSize: JSON.stringify(response.data).length
+        statusText: response.statusText,
+        dataSize: JSON.stringify(response.data).length,
+        responseHeaders: response.headers,
+        timestamp: new Date().toISOString()
       });
+
+      // Log response body for debugging
+      logger.info(`Redox API response body (${method} ${endpoint}):`, {
+        responseBody: JSON.stringify(response.data, null, 2)
+      });
+
       return response.data;
     } catch (error) {
-      logger.error(`Redox API request failed: ${method} ${endpoint}`, {
+      // Enhanced error logging
+      logger.error('=== REDOX API RESPONSE ERROR ===', {
+        method: method,
+        endpoint: endpoint,
         status: error.response?.status,
+        statusText: error.response?.statusText,
         error: error.response?.data?.message || error.message,
-        data: error.response?.data
+        errorData: error.response?.data,
+        requestUrl: config.url,
+        timestamp: new Date().toISOString()
       });
+      
       throw new Error(`Redox API Error: ${error.response?.data?.message || error.message}`);
     }
   }
