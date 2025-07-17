@@ -248,17 +248,18 @@ router.post('/function-call', async (req, res, next) => {
         logger.info('Processing book_appointment function call');
         
         // Extract appointment creation parameters from args
-        const { patientId, slotId, appointmentType, startTime: apptStart, endTime } = args;
+        const { patientId, slotId, appointmentType, startTime: apptStart, endTime, status } = args;
         
-        if (!patientId || !appointmentType || !apptStart || !endTime) {
+        // Only patientId is required according to Redox (for participant reference)
+        if (!patientId) {
           return res.status(400).json({
             success: false,
-            error: 'Missing required fields for appointment booking: patientId, appointmentType, startTime, endTime'
+            error: 'Missing required field for appointment booking: patientId'
           });
         }
 
         const appointmentBundle = RedoxTransformer.createAppointmentBundle(
-          patientId, slotId, appointmentType, apptStart, endTime
+          patientId, slotId, appointmentType, apptStart, endTime, status
         );
         
         const createResponse = await RedoxAPIService.makeRequest(
@@ -282,18 +283,19 @@ router.post('/function-call', async (req, res, next) => {
           appointmentType: updateType, 
           startTime: updateStart, 
           endTime: updateEnd, 
-          status 
+          status: updateStatus 
         } = args;
         
-        if (!appointmentId || !updatePatientId || !updateType || !updateStart || !updateEnd) {
+        // Only appointmentId and patientId are required for update
+        if (!appointmentId || !updatePatientId) {
           return res.status(400).json({
             success: false,
-            error: 'Missing required fields for appointment update: appointmentId, patientId, appointmentType, startTime, endTime'
+            error: 'Missing required fields for appointment update: appointmentId, patientId'
           });
         }
 
         const updateBundle = RedoxTransformer.createAppointmentUpdateBundle(
-          appointmentId, updatePatientId, updateType, updateStart, updateEnd, status
+          appointmentId, updatePatientId, updateType, updateStart, updateEnd, updateStatus
         );
         
         const updateResponse = await RedoxAPIService.makeRequest(

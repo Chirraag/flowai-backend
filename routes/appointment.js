@@ -21,10 +21,6 @@ const logger = require('../utils/logger');
  *             type: object
  *             required:
  *               - patientId
- *               - slotId
- *               - appointmentType
- *               - startTime
- *               - endTime
  *             properties:
  *               patientId:
  *                 type: string
@@ -32,22 +28,26 @@ const logger = require('../utils/logger');
  *                 example: "fd52c5ba-1f3d-4467-bcbf-2677b747ec9c"
  *               slotId:
  *                 type: string
- *                 description: Slot ID
+ *                 description: Slot ID (optional)
  *                 example: "slot-123"
  *               appointmentType:
  *                 type: string
- *                 description: Type of appointment
+ *                 description: Type of appointment (optional)
  *                 example: "FOLLOWUP"
  *               startTime:
  *                 type: string
  *                 format: date-time
- *                 description: Appointment start time
+ *                 description: Appointment start time (optional)
  *                 example: "2025-01-22T14:00:00.000Z"
  *               endTime:
  *                 type: string
  *                 format: date-time
- *                 description: Appointment end time
+ *                 description: Appointment end time (optional)
  *                 example: "2025-01-22T14:30:00.000Z"
+ *               status:
+ *                 type: string
+ *                 description: Appointment status (optional, defaults to 'proposed')
+ *                 example: "proposed"
  *               access_token:
  *                 type: string
  *                 description: Optional access token
@@ -56,7 +56,7 @@ const logger = require('../utils/logger');
  *       201:
  *         description: Appointment created successfully
  *       400:
- *         description: Missing required fields
+ *         description: Missing required field (patientId)
  */
 router.post('/create', authMiddleware, async (req, res, next) => {
   try {
@@ -70,11 +70,12 @@ router.post('/create', authMiddleware, async (req, res, next) => {
       endTime: endTime ? 'provided' : 'missing'
     });
     
-    if (!patientId || !slotId || !appointmentType || !startTime || !endTime) {
-      logger.warn('Appointment creation failed: missing required fields');
+    // Only patientId is required according to Redox specs
+    if (!patientId) {
+      logger.warn('Appointment creation failed: missing required field');
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: patientId, slotId, appointmentType, startTime, endTime'
+        error: 'Missing required field: patientId'
       });
     }
 

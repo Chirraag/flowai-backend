@@ -534,7 +534,7 @@ class RedoxTransformer {
     };
   }
 
-  static createAppointmentBundle(patientId, slotId, appointmentType, startTime, endTime) {
+  static createAppointmentBundle(patientId, slotId, appointmentType, startTime, endTime, status = 'proposed') {
     const appointmentUuid = `urn:uuid:appointment-1`;
     
     const messageHeader = this.createMessageHeader(
@@ -586,55 +586,79 @@ class RedoxTransformer {
       }
     };
 
-    const defaults = appointmentDefaults[appointmentType.toUpperCase()] || appointmentDefaults['CONSULTATION'];
-    
-    const appointment = {
-      fullUrl: appointmentUuid,
-      resource: {
-        resourceType: 'Appointment',
-        identifier: [{
-          system: 'urn:redox:flow-ai:appointment',
-          value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-        }],
-        status: 'booked',
-        appointmentType: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
-            code: appointmentType.toUpperCase(),
-            display: defaults.display
-          }]
+    // Build appointment resource with only required fields + provided optional fields
+    const appointmentResource = {
+      resourceType: 'Appointment',
+      identifier: [{
+        system: 'urn:redox:flow-ai:appointment',
+        value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+      }],
+      status: status,
+      participant: [{
+        actor: {
+          reference: `Patient/${patientId}`,
+          display: `Patient ${patientId.split('-')[0]}`
         },
-        reasonCode: [{
-          coding: [{
-            code: defaults.reasonCode,
-            system: 'http://snomed.info/sct',
-            display: defaults.reasonDisplay
-          }],
-          text: defaults.reasonText
-        }],
-        description: defaults.description,
-        start: startTime,
-        end: endTime,
-        minutesDuration: Math.round((new Date(endTime) - new Date(startTime)) / 60000),
-        participant: [{
-          actor: {
-            reference: `Patient/${patientId}`,
-            display: `Patient ${patientId.split('-')[0]}`
-          },
-          required: 'required',
-          status: 'accepted'
-        }]
-      }
+        required: 'required',
+        status: 'accepted'
+      }]
     };
 
-    // Add comment only if it exists
-    if (defaults.comment) {
-      appointment.resource.comment = defaults.comment;
+    // Add optional fields only if provided
+    if (appointmentType) {
+      const defaults = appointmentDefaults[appointmentType.toUpperCase()] || appointmentDefaults['CONSULTATION'];
+      
+      appointmentResource.appointmentType = {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
+          code: appointmentType.toUpperCase(),
+          display: defaults.display
+        }]
+      };
+      
+      appointmentResource.reasonCode = [{
+        coding: [{
+          code: defaults.reasonCode,
+          system: 'http://snomed.info/sct',
+          display: defaults.reasonDisplay
+        }],
+        text: defaults.reasonText
+      }];
+      
+      appointmentResource.description = defaults.description;
+      
+      // Add comment only if it exists
+      if (defaults.comment) {
+        appointmentResource.comment = defaults.comment;
+      }
     }
+
+    if (startTime) {
+      appointmentResource.start = startTime;
+    }
+
+    if (endTime) {
+      appointmentResource.end = endTime;
+    }
+
+    if (startTime && endTime) {
+      appointmentResource.minutesDuration = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
+    }
+
+    if (slotId) {
+      appointmentResource.slot = [{
+        reference: `Slot/${slotId}`
+      }];
+    }
+
+    const appointment = {
+      fullUrl: appointmentUuid,
+      resource: appointmentResource
+    };
 
     return {
       resourceType: 'Bundle',
-      id: `AppointmentCreateBundle-${appointmentType}`,
+      id: `AppointmentCreateBundle-${appointmentType || 'default'}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, appointment]
