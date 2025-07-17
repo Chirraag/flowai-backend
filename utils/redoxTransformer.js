@@ -350,6 +350,98 @@ class RedoxTransformer {
     };
   }
 
+  static createPatientUpdateBundle(patientData) {
+    const patientUuid = `urn:uuid:patient-${uuidv4()}`;
+    
+    const messageHeader = this.createMessageHeader(
+      'https://fhir.redoxengine.com/EventDefinition/PatientUpdate',
+      patientUuid
+    );
+
+    const patient = {
+      fullUrl: patientUuid,
+      resource: {
+        resourceType: 'Patient',
+        id: patientData.patientId,
+        identifier: [
+          {
+            system: 'urn:redox:flow-ai:MR',
+            use: 'official',
+            value: patientData.medicalRecordNumber || `MR-${Date.now()}`
+          }
+        ],
+        name: [],
+        gender: patientData.gender || 'unknown',
+        birthDate: patientData.birthDate || null,
+        telecom: [],
+        address: []
+      }
+    };
+
+    // Add name if provided
+    if (patientData.firstName || patientData.lastName) {
+      patient.resource.name.push({
+        use: 'official',
+        family: patientData.lastName || 'Unknown',
+        given: [patientData.firstName || 'Unknown']
+      });
+    }
+
+    // Add phone if provided
+    if (patientData.phone) {
+      patient.resource.telecom.push({
+        system: 'phone',
+        use: 'home',
+        value: patientData.phone
+      });
+    }
+
+    // Add email if provided
+    if (patientData.email) {
+      patient.resource.telecom.push({
+        system: 'email',
+        value: patientData.email
+      });
+    }
+
+    // Add address if provided
+    if (patientData.address || patientData.city || patientData.state || patientData.zipCode) {
+      patient.resource.address.push({
+        use: 'home',
+        line: patientData.address ? [patientData.address] : [],
+        city: patientData.city || null,
+        state: patientData.state || null,
+        postalCode: patientData.zipCode || null,
+        country: patientData.country || 'US'
+      });
+    }
+
+    // Add insurance contact if provided
+    if (patientData.insuranceName) {
+      patient.resource.contact = [{
+        name: {
+          text: patientData.insuranceName
+        },
+        relationship: [{
+          coding: [{
+            code: 'I',
+            display: 'Insurance Company',
+            system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
+          }],
+          text: 'Insurance Provider'
+        }]
+      }];
+    }
+
+    return {
+      resourceType: 'Bundle',
+      id: `PatientUpdateBundle-${patientData.patientId}`,
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [messageHeader, patient]
+    };
+  }
+
   static createPatientBundle(patientData) {
     const patientUuid = `urn:uuid:patient-${uuidv4()}`;
     

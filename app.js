@@ -134,6 +134,7 @@ app.use('*', (req, res) => {
       '/api-docs',
       '/api/v1/patient/search',
       '/api/v1/patient/create',
+      '/api/v1/patient/update',
       '/api/v1/slot/search',
       '/api/v1/appointment/create',
       '/api/v1/appointment/update',
