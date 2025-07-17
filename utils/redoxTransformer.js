@@ -353,13 +353,7 @@ class RedoxTransformer {
   static createPatientUpdateBundle(patientData) {
     const patientUuid = `urn:uuid:patient-${uuidv4()}`;
     
-    const messageHeader = this.createMessageHeader(
-      'https://fhir.redoxengine.com/EventDefinition/PatientUpdate',
-      patientUuid
-    );
-
     const patient = {
-      fullUrl: patientUuid,
       resource: {
         resourceType: 'Patient',
         id: patientData.patientId,
@@ -433,11 +427,25 @@ class RedoxTransformer {
       }];
     }
 
+    const messageHeader = {
+      resource: {
+        resourceType: 'MessageHeader',
+        eventUri: 'https://fhir.redoxengine.com/EventDefinition/PatientUpdate',
+        source: {
+          name: REDOX_CONFIG.sourceApp,
+          endpoint: REDOX_CONFIG.sourceEndpoint
+        },
+        focus: [
+          {
+            reference: `Patient/${patientData.patientId}`
+          }
+        ]
+      }
+    };
+
     return {
       resourceType: 'Bundle',
-      id: `PatientUpdateBundle-${patientData.patientId}`,
       type: 'message',
-      timestamp: new Date().toISOString(),
       entry: [messageHeader, patient]
     };
   }

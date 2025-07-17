@@ -167,7 +167,8 @@ router.post('/update', authMiddleware, async (req, res, next) => {
       success: result.success,
       data: result.success ? { 
         statusCode: result.statusCode,
-        patientId: patientId
+        originalPatientId: patientId,
+        ...(result.generatedId && { newPatientId: result.generatedId })
       } : { error: result.error }
     });
   } catch (error) {

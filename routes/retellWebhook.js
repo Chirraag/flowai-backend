@@ -98,14 +98,45 @@ router.post('/webhook', async (req, res, next) => {
       appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
     }
 
-    // Prepare combined response for Retell
-    const retellResponse = {
-      success: true,
+    // Prepare response for Retell inbound call webhook format
+    const dynamicVariables = {
       caller_phone: from_number,
       patient_found: patients.length > 0,
-      patient_data: patientData,
-      latest_appointment: appointments.length > 0 ? appointments[0] : null,
       access_token: accessToken
+    };
+
+    // Add individual patient details as separate dynamic variables
+    if (patientData) {
+      dynamicVariables.patient_id = patientData.patientId;
+      dynamicVariables.patient_name = patientData.fullName;
+      dynamicVariables.patient_phone = patientData.phone;
+      dynamicVariables.patient_email = patientData.email;
+      dynamicVariables.patient_dob = patientData.dateOfBirth;
+      dynamicVariables.patient_zip = patientData.zipCode;
+      dynamicVariables.patient_address = patientData.address;
+      dynamicVariables.insurance_name = patientData.insuranceName;
+      dynamicVariables.insurance_type = patientData.insuranceType;
+      dynamicVariables.insurance_member_id = patientData.insuranceMemberId;
+    }
+
+    // Add appointment details as separate dynamic variables
+    if (appointments.length > 0) {
+      const appointment = appointments[0];
+      dynamicVariables.appointment_id = appointment.appointmentId;
+      dynamicVariables.appointment_type = appointment.appointmentType;
+      dynamicVariables.appointment_start = appointment.startTime;
+      dynamicVariables.appointment_status = appointment.status;
+      dynamicVariables.appointment_description = appointment.description;
+    }
+
+    const retellResponse = {
+      call_inbound: {
+        dynamic_variables: dynamicVariables,
+        metadata: {
+          success: true,
+          timestamp: new Date().toISOString()
+        }
+      }
     };
 
     logger.info('Retell webhook completed', { 
