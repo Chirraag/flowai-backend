@@ -193,9 +193,18 @@ router.post('/webhook', async (req, res, next) => {
  */
 router.post('/function-call', async (req, res, next) => {
   try {
-    // Log complete function call request body
+    // Log function call request body (excluding transcript and transcript_object for cleaner logs)
+    const logBody = {
+      ...req.body,
+      call: req.body.call ? {
+        ...req.body.call,
+        transcript: req.body.call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
+        transcript_object: req.body.call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined
+      } : undefined
+    };
+    
     logger.info('=== RETELL FUNCTION CALL RECEIVED ===', {
-      requestBody: JSON.stringify(req.body, null, 2),
+      requestBody: JSON.stringify(logBody, null, 2),
       headers: req.headers,
       timestamp: new Date().toISOString()
     });
@@ -207,7 +216,11 @@ router.post('/function-call', async (req, res, next) => {
       hasArgs: !!args,
       hasCall: !!call,
       args: args,
-      call: call
+      call: call ? { 
+        ...call, 
+        transcript: call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
+        transcript_object: call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined
+      } : undefined
     });
 
     if (!name || !args) {
