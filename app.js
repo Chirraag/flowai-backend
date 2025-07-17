@@ -56,20 +56,14 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Redox API Wrapper',
+      title: 'Flow AI API',
       version: '1.0.0',
-      description: 'A wrapper API for Redox FHIR services with simplified request/response format',
+      description: 'Redox FHIR services with simplified request/response format',
       contact: {
         name: 'API Support',
         email: 'support@example.com'
       }
     },
-    servers: [
-      {
-        url: `http://localhost:${PORT}`,
-        description: 'Development server'
-      }
-    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -152,7 +146,7 @@ app.use('*', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  logger.info(`Redox API Wrapper running on port ${PORT}`);
+  logger.info(`Flow AI API running on port ${PORT}`);
   logger.info(`API Documentation: http://localhost:${PORT}/api-docs`);
   logger.info(`Health Check: http://localhost:${PORT}/health`);
 });
