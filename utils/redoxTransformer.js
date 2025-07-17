@@ -534,7 +534,11 @@ class RedoxTransformer {
     };
   }
 
-  static createAppointmentBundle(patientId, slotId, appointmentType, startTime, endTime, status = 'proposed') {
+  static createAppointmentBundle(patientId, slotId, appointmentType, startTime, endTime, status) {
+    // Auto-determine status based on provided information
+    if (!status) {
+      status = (startTime && endTime) ? 'booked' : 'proposed';
+    }
     const appointmentUuid = `urn:uuid:appointment-1`;
     
     const messageHeader = this.createMessageHeader(
