@@ -71,6 +71,22 @@ class AuthService {
 
       this.accessToken = response.data.accessToken;
       
+      // Handle token expiry
+      if (response.data.expires) {
+        this.tokenExpiry = new Date(response.data.expires).getTime();
+      } else if (response.data.expiresIn) {
+        this.tokenExpiry = Date.now() + (response.data.expiresIn * 1000);
+      } else {
+        // Default to 1 hour if no expiry info
+        this.tokenExpiry = Date.now() + (3600 * 1000);
+      }
+      
+      logger.info('Access token cached successfully', {
+        expires: response.data.expires,
+        expiresIn: response.data.expiresIn,
+        calculatedExpiry: new Date(this.tokenExpiry).toISOString()
+      });
+      
       return this.accessToken;
     } catch (error) {
       // Enhanced error logging

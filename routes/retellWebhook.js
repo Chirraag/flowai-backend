@@ -233,8 +233,8 @@ router.post('/function-call', async (req, res, next) => {
       });
     }
 
-    // Get access token from args, call context, or generate new one
-    const accessToken = args?.access_token || call?.access_token || await authService.getAccessToken();
+    // Get access token from args only, otherwise generate new one
+    const accessToken = args?.access_token || await authService.getAccessToken();
     
     let result;
 
@@ -347,7 +347,7 @@ router.post('/function-call', async (req, res, next) => {
     res.json(functionResponse);
 
   } catch (error) {
-    logger.error('Retell function call error', { error: error.message, functionName: name });
+    logger.error('Retell function call error', { error: error.message, functionName: req.body?.name || 'unknown' });
     next(error);
   }
 });
