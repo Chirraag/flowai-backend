@@ -199,7 +199,8 @@ router.post('/function-call', async (req, res, next) => {
       call: req.body.call ? {
         ...req.body.call,
         transcript: req.body.call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
-        transcript_object: req.body.call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined
+        transcript_object: req.body.call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined,
+        transcript_with_tool_calls: req.body.call.transcript_with_tool_calls ? '[TRANSCRIPT WITH TOOL CALLS OMITTED]' : undefined
       } : undefined
     };
     
@@ -219,7 +220,8 @@ router.post('/function-call', async (req, res, next) => {
       call: call ? { 
         ...call, 
         transcript: call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
-        transcript_object: call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined
+        transcript_object: call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined,
+        transcript_with_tool_calls: req.body.call.transcript_with_tool_calls ? '[TRANSCRIPT WITH TOOL CALLS OMITTED]' : undefined
       } : undefined
     });
 
