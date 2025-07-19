@@ -250,100 +250,59 @@ class RedoxTransformer {
       appointmentUuid
     );
 
-    // Map appointment types to proper display values and defaults
-    const appointmentDefaults = {
-      'FOLLOWUP': {
-        display: 'A follow up visit from a previous appointment',
-        reasonCode: '185389009',
-        reasonDisplay: 'Follow-up visit',
-        reasonText: 'Follow-up for MRI results',
-        description: 'Follow-up appointment to discuss MRI brain results',
-        comment: 'Patient to bring MRI images if available'
-      },
-      'ROUTINE': {
-        display: 'Routine visit',
-        reasonCode: '390906007',
-        reasonDisplay: 'Routine visit',
-        reasonText: 'Routine check-up',
-        description: 'Routine appointment for general health assessment',
-        comment: 'Please bring any current medications'
-      },
-      'CONSULTATION': {
-        display: 'Consultation appointment',
-        reasonCode: '11429006',
-        reasonDisplay: 'Consultation',
-        reasonText: 'Medical consultation',
-        description: 'Consultation appointment with specialist',
-        comment: 'Please bring previous medical records'
-      },
-      'CHECKUP': {
-        display: 'A routine check-up, such as an annual physical',
-        reasonCode: '390906007',
-        reasonDisplay: 'Routine visit',
-        reasonText: 'Annual check-up',
-        description: 'Annual physical examination',
-        comment: 'Fasting may be required for blood work'
-      },
-      'WALKIN': {
-        display: 'A previously unscheduled walk-in visit',
-        reasonCode: '185389009',
-        reasonDisplay: 'Walk-in visit',
-        reasonText: 'Walk-in appointment',
-        description: 'Walk-in appointment for immediate care',
-        comment: null
-      }
+    // Sanitize appointment type if provided
+    const sanitizedType = appointmentType ? appointmentType.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+    
+    // Build appointment resource with only required fields + provided optional fields
+    const appointmentResource = {
+      resourceType: 'Appointment',
+      id: appointmentId,
+      identifier: [{
+        system: 'urn:redox:flow-ai:appointment',
+        value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+      }],
+      status: status,
+      participant: [{
+        actor: {
+          reference: `Patient/${patientId}`,
+          display: `Patient ${patientId.split('-')[0]}`
+        },
+        required: 'required',
+        status: 'accepted'
+      }]
     };
 
-    const defaults = appointmentDefaults[appointmentType.toUpperCase()] || appointmentDefaults['CONSULTATION'];
-    
+    // Add optional fields only if provided
+    if (appointmentType) {
+      appointmentResource.appointmentType = {
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
+          code: sanitizedType,
+          display: appointmentType // Use original as display
+        }]
+      };
+    }
+
+    if (startTime) {
+      appointmentResource.start = startTime;
+    }
+
+    if (endTime) {
+      appointmentResource.end = endTime;
+    }
+
+    if (startTime && endTime) {
+      appointmentResource.minutesDuration = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
+    }
+
     const appointment = {
       fullUrl: appointmentUuid,
-      resource: {
-        resourceType: 'Appointment',
-        id: appointmentId,
-        identifier: [{
-          system: 'urn:redox:flow-ai:appointment',
-          value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-        }],
-        status: status,
-        appointmentType: {
-          coding: [{
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
-            code: appointmentType.toUpperCase(),
-            display: defaults.display
-          }]
-        },
-        reasonCode: [{
-          coding: [{
-            code: defaults.reasonCode,
-            system: 'http://snomed.info/sct',
-            display: defaults.reasonDisplay
-          }],
-          text: defaults.reasonText
-        }],
-        description: defaults.description,
-        start: startTime,
-        end: endTime,
-        minutesDuration: Math.round((new Date(endTime) - new Date(startTime)) / 60000),
-        participant: [{
-          actor: {
-            reference: `Patient/${patientId}`,
-            display: `Patient ${patientId.split('-')[0]}`
-          },
-          required: 'required',
-          status: 'accepted'
-        }]
-      }
+      resource: appointmentResource
     };
-
-    // Add comment only if it exists
-    if (defaults.comment) {
-      appointment.resource.comment = defaults.comment;
-    }
 
     return {
       resourceType: 'Bundle',
-      id: `AppointmentUpdateBundle-${appointmentType}`,
+      id: `AppointmentUpdateBundle-${(appointmentType || 'default').replace(/[^a-zA-Z0-9-]/g, '-')}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, appointment]
@@ -361,7 +320,7 @@ class RedoxTransformer {
           {
             system: 'urn:redox:flow-ai:MR',
             use: 'official',
-            value: patientData.medicalRecordNumber || `MR-${Date.now()}`
+            value: patientData.medicalRecordNumber || `MR-${uuidv4()}`
           }
         ],
         name: [],
@@ -465,7 +424,7 @@ class RedoxTransformer {
         identifier: [{
           system: 'urn:redox:flow-ai:MR',
           use: 'official',
-          value: patientData.medicalRecordNumber || `MR-${Date.now()}`
+          value: patientData.medicalRecordNumber || `MR-${uuidv4()}`
         }],
         name: [{
           use: 'official',
@@ -587,6 +546,22 @@ class RedoxTransformer {
         reasonText: 'Walk-in appointment',
         description: 'Walk-in appointment for immediate care',
         comment: null
+      },
+      'IMAGING': {
+        display: 'Diagnostic imaging appointment',
+        reasonCode: '363679005',
+        reasonDisplay: 'Imaging',
+        reasonText: 'Diagnostic imaging',
+        description: 'Appointment for diagnostic imaging studies',
+        comment: 'Please arrive 15 minutes early'
+      },
+      'XRAY': {
+        display: 'X-ray imaging appointment',
+        reasonCode: '363679005',
+        reasonDisplay: 'X-ray imaging',
+        reasonText: 'X-ray study',
+        description: 'X-ray imaging appointment',
+        comment: 'Please arrive 15 minutes early'
       }
     };
 
@@ -610,31 +585,16 @@ class RedoxTransformer {
 
     // Add optional fields only if provided
     if (appointmentType) {
-      const defaults = appointmentDefaults[appointmentType.toUpperCase()] || appointmentDefaults['CONSULTATION'];
+      // Sanitize appointment type for code (remove spaces, special chars)
+      const sanitizedType = appointmentType.toUpperCase().replace(/[^A-Z0-9]/g, '');
       
       appointmentResource.appointmentType = {
         coding: [{
           system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
-          code: appointmentType.toUpperCase(),
-          display: defaults.display
+          code: sanitizedType,
+          display: appointmentType // Use original as display
         }]
       };
-      
-      appointmentResource.reasonCode = [{
-        coding: [{
-          code: defaults.reasonCode,
-          system: 'http://snomed.info/sct',
-          display: defaults.reasonDisplay
-        }],
-        text: defaults.reasonText
-      }];
-      
-      appointmentResource.description = defaults.description;
-      
-      // Add comment only if it exists
-      if (defaults.comment) {
-        appointmentResource.comment = defaults.comment;
-      }
     }
 
     if (startTime) {
@@ -662,7 +622,7 @@ class RedoxTransformer {
 
     return {
       resourceType: 'Bundle',
-      id: `AppointmentCreateBundle-${appointmentType || 'default'}`,
+      id: `AppointmentCreateBundle-${(appointmentType || 'default').replace(/[^a-zA-Z0-9-]/g, '-')}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, appointment]
