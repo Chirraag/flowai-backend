@@ -21,7 +21,7 @@ const authService = new AuthService();
  *         patientId:
  *           type: string
  *           description: Redox patient ID
- *           example: "fbee8d6b-5acf-370c-7edd-af0d84f5288c"
+ *           example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *     
  *     TriggerSchedulingCallResponse:
  *       type: object
@@ -34,7 +34,7 @@ const authService = new AuthService();
  *           example: "Scheduling event triggered successfully"
  *         patientId:
  *           type: string
- *           example: "fbee8d6b-5acf-370c-7edd-af0d84f5288c"
+ *           example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  */
 
 /**
