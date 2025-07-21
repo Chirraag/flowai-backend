@@ -39,7 +39,7 @@ class RetellService {
         agent_id: this.agentId,
         from_number: this.fromNumber,
         to_number: toNumber,
-        dynamic_variables: stringifiedVariables
+        retell_llm_dynamic_variables: stringifiedVariables
       };
 
       logger.info('Creating outbound call via Retell', {
