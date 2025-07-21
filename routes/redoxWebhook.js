@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
-const redoxApiService = require('../services/redoxApiService');
+const RedoxAPIService = require('../services/redoxApiService');
+const RedoxTransformer = require('../utils/redoxTransformer');
 const retellService = require('../services/retellService');
+const AuthService = require('../services/authService');
 const authenticate = require('../middleware/auth');
+
+const authService = new AuthService();
 
 /**
  * @swagger
@@ -103,14 +107,24 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
     patientData.patientId = redoxPatientId;
     
     // Get access token for subsequent API calls
-    const tokenResponse = await redoxApiService.authenticate();
-    patientData.accessToken = tokenResponse.accessToken;
+    const accessToken = await authService.getAccessToken();
+    patientData.accessToken = accessToken;
 
     // Get appointment details for the patient
-    const appointments = await redoxApiService.searchAppointments(
-      patientData.patientId,
-      patientData.accessToken
-    );
+    let appointments = [];
+    try {
+      const searchParams = RedoxTransformer.createAppointmentSearchParams(patientData.patientId);
+      const appointmentResponse = await RedoxAPIService.makeRequest(
+        'POST',
+        '/Appointment/_search',
+        null,
+        searchParams,
+        accessToken
+      );
+      appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
+    } catch (appointmentError) {
+      logger.warn('Failed to fetch appointments', { error: appointmentError.message });
+    }
 
     // Find the relevant appointment based on the event
     const appointment = findRelevantAppointment(appointments, bundle);
@@ -154,6 +168,14 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
       access_token: patientData.accessToken || ''
     };
 
+    // Validate phone number before triggering call
+    if (!patientData.phone || patientData.phone.trim() === '') {
+      logger.error('Cannot trigger call - no phone number found', {
+        patientId: redoxPatientId
+      });
+      throw new Error('Patient phone number is required for outbound call');
+    }
+
     // Trigger outbound call via Retell
     await retellService.createPhoneCall(patientData.phone, dynamicVariables);
     
@@ -180,9 +202,20 @@ function transformFhirPatient(fhirPatient) {
   const phone = telecom.find(t => t.system === 'phone')?.value || '';
   const email = telecom.find(t => t.system === 'email')?.value || '';
   
+  // Build full name and validate it's not empty
+  const fullName = `${name.given?.join(' ') || ''} ${name.family || ''}`.trim();
+  
+  // Log warning if critical fields are missing
+  if (!phone) {
+    logger.warn('Patient missing phone number', { patientId: fhirPatient.id });
+  }
+  if (!fullName) {
+    logger.warn('Patient missing name', { patientId: fhirPatient.id });
+  }
+  
   return {
     patientId: fhirPatient.id,
-    fullName: `${name.given?.join(' ') || ''} ${name.family || ''}`.trim(),
+    fullName: fullName || 'Unknown Patient',
     phone: phone,
     email: email,
     dateOfBirth: fhirPatient.birthDate || '',
@@ -257,18 +290,22 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
     }
 
     // Get patient details from Redox
-    const tokenResponse = await redoxApiService.authenticate();
-    const patientResponse = await redoxApiService.makeRequest(
+    const accessToken = await authService.getAccessToken();
+    const patientResponse = await RedoxAPIService.makeRequest(
       'GET',
       `/Patient/${patientId}`,
-      {},
-      tokenResponse.accessToken
+      null,
+      null,
+      accessToken
     );
 
     if (!patientResponse || !patientResponse.id) {
       return res.status(404).json({ error: 'Patient not found' });
     }
 
+    // Generate consistent test ID
+    const testId = Date.now();
+    
     // Create a mock service-request-created event bundle
     const mockBundle = {
       resourceType: 'Bundle',
@@ -278,14 +315,14 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
           resource: {
             eventUri: 'https://fhir.redoxengine.com/EventDefinition/ServiceRequestCreated',
             resourceType: 'MessageHeader',
-            id: `test-${Date.now()}`,
+            id: `test-${testId}`,
             source: {
               name: 'Test Trigger',
               endpoint: 'test-endpoint'
             },
             focus: [
               {
-                reference: `ServiceRequest/test-${Date.now()}`
+                reference: `ServiceRequest/test-${testId}`
               },
               {
                 reference: `Patient/${patientId}`
@@ -298,10 +335,10 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
           resource: patientResponse
         },
         {
-          fullUrl: `https://fhir.redoxengine.com/fhir-sandbox/ServiceRequest/test-${Date.now()}`,
+          fullUrl: `https://fhir.redoxengine.com/fhir-sandbox/ServiceRequest/test-${testId}`,
           resource: {
             resourceType: 'ServiceRequest',
-            id: `test-${Date.now()}`,
+            id: `test-${testId}`,
             status: 'active',
             intent: 'order',
             code: {
