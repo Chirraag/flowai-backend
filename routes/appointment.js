@@ -25,11 +25,7 @@ const logger = require('../utils/logger');
  *               patientId:
  *                 type: string
  *                 description: Patient ID
- *                 example: "fd52c5ba-1f3d-4467-bcbf-2677b747ec9c"
- *               slotId:
- *                 type: string
- *                 description: Slot ID (optional)
- *                 example: "slot-123"
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *               appointmentType:
  *                 type: string
  *                 description: Type of appointment (optional)
@@ -60,11 +56,10 @@ const logger = require('../utils/logger');
  */
 router.post('/create', authMiddleware, async (req, res, next) => {
   try {
-    const { patientId, slotId, appointmentType, startTime, endTime } = req.body;
+    const { patientId, appointmentType, startTime, endTime } = req.body;
     
     logger.info('Appointment creation request', {
       patientId: patientId ? 'provided' : 'missing',
-      slotId: slotId ? 'provided' : 'missing',
       appointmentType: appointmentType ? 'provided' : 'missing',
       startTime: startTime ? 'provided' : 'missing',
       endTime: endTime ? 'provided' : 'missing'
@@ -80,7 +75,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
     }
 
     const appointmentBundle = RedoxTransformer.createAppointmentBundle(
-      patientId, slotId, appointmentType, startTime, endTime
+      patientId, appointmentType, startTime, endTime
     );
     
     const redoxResponse = await RedoxAPIService.makeRequest(
@@ -137,7 +132,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
  *               patientId:
  *                 type: string
  *                 description: Patient ID
- *                 example: "fd52c5ba-1f3d-4467-bcbf-2677b747ec9c"
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *               appointmentType:
  *                 type: string
  *                 description: Type of appointment
@@ -237,7 +232,7 @@ router.post('/update', authMiddleware, async (req, res, next) => {
  *               patientId:
  *                 type: string
  *                 description: Patient ID to search appointments for
- *                 example: "fd52c5ba-1f3d-4467-bcbf-2677b747ec9c"
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *               access_token:
  *                 type: string
  *                 description: Optional access token

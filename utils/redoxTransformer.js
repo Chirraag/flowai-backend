@@ -493,7 +493,7 @@ class RedoxTransformer {
     };
   }
 
-  static createAppointmentBundle(patientId, slotId, appointmentType, startTime, endTime, status) {
+  static createAppointmentBundle(patientId, appointmentType, startTime, endTime, status) {
     // Auto-determine status based on provided information
     if (!status) {
       status = (startTime && endTime) ? 'booked' : 'proposed';
@@ -609,11 +609,6 @@ class RedoxTransformer {
       appointmentResource.minutesDuration = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
     }
 
-    if (slotId) {
-      appointmentResource.slot = [{
-        reference: `Slot/${slotId}`
-      }];
-    }
 
     const appointment = {
       fullUrl: appointmentUuid,

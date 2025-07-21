@@ -274,7 +274,7 @@ router.post('/function-call', async (req, res, next) => {
         }
 
         const appointmentBundle = RedoxTransformer.createAppointmentBundle(
-          patientId, slotId, appointmentType, apptStart, endTime, status
+          patientId, appointmentType, apptStart, endTime, status
         );
         
         const createResponse = await RedoxAPIService.makeRequest(
