@@ -12,12 +12,12 @@ const { authenticate } = require('../middleware/auth');
  *     TriggerSchedulingCallRequest:
  *       type: object
  *       required:
- *         - identifier
+ *         - patientId
  *       properties:
- *         identifier:
+ *         patientId:
  *           type: string
- *           description: Internal patient identifier (MR number)
- *           example: "PAT123456"
+ *           description: Redox patient ID
+ *           example: "fbee8d6b-5acf-370c-7edd-af0d84f5288c"
  *     
  *     TriggerSchedulingCallResponse:
  *       type: object
@@ -28,9 +28,9 @@ const { authenticate } = require('../middleware/auth');
  *         message:
  *           type: string
  *           example: "Scheduling event triggered successfully"
- *         identifier:
+ *         patientId:
  *           type: string
- *           example: "PAT123456"
+ *           example: "fbee8d6b-5acf-370c-7edd-af0d84f5288c"
  */
 
 /**
@@ -42,34 +42,44 @@ const { authenticate } = require('../middleware/auth');
 
 /**
  * Webhook endpoint for Redox scheduling updates
- * Listens for appointment scheduling events and triggers outbound calls via Retell
+ * Listens for service request events and triggers outbound calls via Retell
  */
 router.post('/webhook/scheduling', async (req, res) => {
   try {
     logger.info('Received Redox scheduling webhook', { 
       eventType: req.body.Meta?.EventType,
-      source: req.body.Meta?.Source
+      dataModel: req.body.Meta?.DataModel
     });
 
-    const event = req.body;
+    const bundle = req.body;
     
     // Validate event structure
-    if (!event.Patient || !event.Meta) {
+    if (!bundle.entry || !bundle.Meta || bundle.resourceType !== 'Bundle') {
       logger.error('Invalid webhook payload structure');
       return res.status(400).json({ error: 'Invalid webhook payload' });
     }
 
-    // Extract patient identifiers from the event
-    const patientIdentifiers = event.Patient.Identifiers || [];
-    const internalPatientId = patientIdentifiers.find(id => id.Type === 'MR')?.ID;
+    // Extract patient resource from bundle
+    const patientEntry = bundle.entry.find(e => 
+      e.resource?.resourceType === 'Patient' || 
+      e.fullUrl?.includes('/Patient/')
+    );
     
-    if (!internalPatientId) {
-      logger.error('No internal patient identifier found in webhook');
-      return res.status(400).json({ error: 'Patient identifier not found' });
+    if (!patientEntry || !patientEntry.resource) {
+      logger.error('No patient resource found in webhook');
+      return res.status(400).json({ error: 'Patient resource not found' });
+    }
+
+    const patientResource = patientEntry.resource;
+    const redoxPatientId = patientResource.id;
+    
+    if (!redoxPatientId) {
+      logger.error('No patient ID found in patient resource');
+      return res.status(400).json({ error: 'Patient ID not found' });
     }
 
     // Process the scheduling event
-    await processSchedulingEvent(event, internalPatientId);
+    await processSchedulingEvent(bundle, redoxPatientId, patientResource);
     
     // Send acknowledgment to Redox
     res.status(200).json({ 
@@ -86,15 +96,15 @@ router.post('/webhook/scheduling', async (req, res) => {
 /**
  * Process scheduling event and trigger outbound call
  */
-async function processSchedulingEvent(event, internalPatientId) {
+async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
   try {
-    // Search for patient using internal identifier
-    const patientData = await searchPatientByIdentifier(internalPatientId);
+    // Transform the patient resource to our format
+    const patientData = transformFhirPatient(patientResource);
+    patientData.patientId = redoxPatientId;
     
-    if (!patientData) {
-      logger.error('Patient not found with identifier', { internalPatientId });
-      return;
-    }
+    // Get access token for subsequent API calls
+    const tokenResponse = await redoxApiService.authenticate();
+    patientData.accessToken = tokenResponse.accessToken;
 
     // Get appointment details for the patient
     const appointments = await redoxApiService.searchAppointments(
@@ -103,13 +113,23 @@ async function processSchedulingEvent(event, internalPatientId) {
     );
 
     // Find the relevant appointment based on the event
-    const appointment = findRelevantAppointment(appointments, event);
+    const appointment = findRelevantAppointment(appointments, bundle);
 
+    // Extract service request details from bundle
+    const serviceRequestEntry = bundle.entry.find(e => 
+      e.resource?.resourceType === 'ServiceRequest'
+    );
+    const serviceRequest = serviceRequestEntry?.resource || {};
+    
     // Prepare dynamic variables for Retell call
     const dynamicVariables = {
       // Event details
-      event_type: event.Meta?.EventType || '',
-      event_source: event.Meta?.Source || '',
+      event_type: bundle.Meta?.EventType || '',
+      event_data_model: bundle.Meta?.DataModel || '',
+      service_request_id: serviceRequest.id || '',
+      service_request_status: serviceRequest.status || '',
+      service_request_intent: serviceRequest.intent || '',
+      service_request_code: serviceRequest.code?.coding?.[0]?.display || '',
       
       // Patient details
       patient_id: patientData.patientId || '',
@@ -138,8 +158,8 @@ async function processSchedulingEvent(event, internalPatientId) {
     await retellService.createPhoneCall(patientData.phone, dynamicVariables);
     
     logger.info('Outbound call triggered successfully', {
-      patientId: patientData.patientId,
-      eventType: event.Meta?.EventType
+      patientId: redoxPatientId,
+      eventType: bundle.Meta?.EventType
     });
 
   } catch (error) {
@@ -148,44 +168,6 @@ async function processSchedulingEvent(event, internalPatientId) {
   }
 }
 
-/**
- * Search for patient using internal identifier
- */
-async function searchPatientByIdentifier(identifier) {
-  try {
-    // First, get an access token for the search
-    const tokenResponse = await redoxApiService.authenticate();
-    const accessToken = tokenResponse.accessToken;
-
-    // Search for patient using identifier
-    const searchParams = {
-      resourceType: 'Patient',
-      identifier: identifier
-    };
-
-    const response = await redoxApiService.makeRequest(
-      'GET',
-      '/Patient',
-      searchParams,
-      accessToken
-    );
-
-    if (!response.entry || response.entry.length === 0) {
-      return null;
-    }
-
-    // Transform FHIR patient to our format
-    const fhirPatient = response.entry[0].resource;
-    const transformedPatient = transformFhirPatient(fhirPatient);
-    transformedPatient.accessToken = accessToken;
-    
-    return transformedPatient;
-
-  } catch (error) {
-    logger.error('Error searching patient by identifier', error);
-    throw error;
-  }
-}
 
 /**
  * Transform FHIR patient resource to our internal format
@@ -215,15 +197,20 @@ function transformFhirPatient(fhirPatient) {
 /**
  * Find relevant appointment from the event details
  */
-function findRelevantAppointment(appointments, event) {
+function findRelevantAppointment(appointments, bundle) {
   if (!appointments || appointments.length === 0) {
     return null;
   }
 
-  // If event contains appointment ID, find matching appointment
-  if (event.Visit?.VisitNumber) {
+  // Extract service request from bundle if available
+  const serviceRequestEntry = bundle.entry.find(e => 
+    e.resource?.resourceType === 'ServiceRequest'
+  );
+  
+  if (serviceRequestEntry?.resource?.id) {
+    // Try to find appointment related to this service request
     const appointment = appointments.find(apt => 
-      apt.appointmentId === event.Visit.VisitNumber
+      apt.serviceRequestId === serviceRequestEntry.resource.id
     );
     if (appointment) return appointment;
   }
@@ -237,7 +224,7 @@ function findRelevantAppointment(appointments, event) {
  * /api/v1/redox/test/trigger-scheduling-call:
  *   post:
  *     summary: Trigger a test scheduling call for a patient
- *     description: Manually trigger an outbound call for a patient using their internal identifier
+ *     description: Manually trigger an outbound call for a patient using their Redox patient ID
  *     tags: [Redox Webhooks]
  *     security:
  *       - bearerAuth: []
@@ -255,7 +242,7 @@ function findRelevantAppointment(appointments, event) {
  *             schema:
  *               $ref: '#/components/schemas/TriggerSchedulingCallResponse'
  *       400:
- *         description: Bad request - missing identifier
+ *         description: Bad request - missing patient ID
  *       401:
  *         description: Unauthorized - invalid or missing token
  *       500:
@@ -263,38 +250,89 @@ function findRelevantAppointment(appointments, event) {
  */
 router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
   try {
-    const { identifier } = req.body;
+    const { patientId } = req.body;
     
-    if (!identifier) {
-      return res.status(400).json({ error: 'Patient identifier is required' });
+    if (!patientId) {
+      return res.status(400).json({ error: 'Patient ID is required' });
     }
 
-    // Create a mock scheduling event
-    const mockEvent = {
-      Meta: {
-        EventType: 'AppointmentBooked',
-        Source: 'Test Trigger'
-      },
-      Patient: {
-        Identifiers: [
-          {
-            Type: 'MR',
-            ID: identifier
+    // Get patient details from Redox
+    const tokenResponse = await redoxApiService.authenticate();
+    const patientResponse = await redoxApiService.makeRequest(
+      'GET',
+      `/Patient/${patientId}`,
+      {},
+      tokenResponse.accessToken
+    );
+
+    if (!patientResponse || !patientResponse.id) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    // Create a mock service-request-created event bundle
+    const mockBundle = {
+      resourceType: 'Bundle',
+      type: 'message',
+      entry: [
+        {
+          resource: {
+            eventUri: 'https://fhir.redoxengine.com/EventDefinition/ServiceRequestCreated',
+            resourceType: 'MessageHeader',
+            id: `test-${Date.now()}`,
+            source: {
+              name: 'Test Trigger',
+              endpoint: 'test-endpoint'
+            },
+            focus: [
+              {
+                reference: `ServiceRequest/test-${Date.now()}`
+              },
+              {
+                reference: `Patient/${patientId}`
+              }
+            ]
           }
-        ]
-      },
-      Visit: {
-        VisitNumber: 'TEST-' + Date.now()
+        },
+        {
+          fullUrl: `https://fhir.redoxengine.com/fhir-sandbox/Patient/${patientId}`,
+          resource: patientResponse
+        },
+        {
+          fullUrl: `https://fhir.redoxengine.com/fhir-sandbox/ServiceRequest/test-${Date.now()}`,
+          resource: {
+            resourceType: 'ServiceRequest',
+            id: `test-${Date.now()}`,
+            status: 'active',
+            intent: 'order',
+            code: {
+              coding: [
+                {
+                  code: 'TEST',
+                  display: 'Test Service Request',
+                  system: 'http://test.system'
+                }
+              ]
+            },
+            subject: {
+              reference: `Patient/${patientId}`
+            },
+            authoredOn: new Date().toISOString()
+          }
+        }
+      ],
+      Meta: {
+        DataModel: 'FHIR.Event.Order',
+        EventType: 'service-request-created'
       }
     };
 
     // Process the event
-    await processSchedulingEvent(mockEvent, identifier);
+    await processSchedulingEvent(mockBundle, patientId, patientResponse);
     
     res.json({
       success: true,
       message: 'Scheduling event triggered successfully',
-      identifier: identifier
+      patientId: patientId
     });
 
   } catch (error) {
