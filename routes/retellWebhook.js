@@ -355,159 +355,96 @@ router.post('/function-call', async (req, res, next) => {
 });
 
 
+// Add this endpoint to your existing retellWebhook.js file, after the existing endpoints
+
+/**
+ * @swagger
+ * /api/v1/retell/call/update:
+ *   post:
+ *     summary: Handle Retell call updates (stores data only for 'call_analyzed' events)
+ *     tags: [Retell Call Updates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - event
+ *               - call
+ *             properties:
+ *               event:
+ *                 type: string
+ *                 description: The event type (only 'call_analyzed' events are stored in DB)
+ *                 example: "call_analyzed"
+ *               call:
+ *                 type: object
+ *                 description: Retell call data object
+ *     responses:
+ *       200:
+ *         description: Call update processed successfully
+ *       400:
+ *         description: Invalid request - missing required fields
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/call/update', async (req, res, next) => {
   try {
-    // Log the incoming call update
-    logger.info('=== RETELL CALL UPDATE RECEIVED ===', {
-      hasCallData: !!req.body.call,
-      timestamp: new Date().toISOString()
-    });
+    const { event, call } = req.body;
 
-    const { call } = req.body;
-
-    console.log('Call update received:', call);
-
-    if (!call) {
-      logger.warn('Retell call update failed: missing call data');
-      return res.status(400).json({
-        success: false,
-        error: 'Missing call data in request body'
+    // Only process if event is 'call_analyzed'
+    if (event !== 'call_analyzed') {
+      return res.json({
+        success: true,
+        message: `Event ${event} acknowledged but not stored`
       });
     }
 
-    // Extract call_id from the call object
-    const callId = call.call_id;
-
-    if (!callId) {
-      logger.warn('Retell call update failed: missing call_id');
+    if (!call || !call.call_id) {
       return res.status(400).json({
         success: false,
-        error: 'Missing call_id in call data'
+        error: 'Missing call data or call_id'
       });
     }
 
-    // Log call details (omitting sensitive data like full transcript)
-    logger.info('Processing call update', {
-      call_id: callId,
-      agent_id: call.agent_id,
-      call_status: call.call_status,
-      start_timestamp: call.start_timestamp,
-      end_timestamp: call.end_timestamp,
-      duration: call.end_timestamp && call.start_timestamp ? 
-        (call.end_timestamp - call.start_timestamp) / 1000 + ' seconds' : 'unknown',
-      has_transcript: !!call.transcript,
-      has_recording_url: !!call.recording_url,
-      has_public_log_url: !!call.public_log_url,
-      has_call_analysis: !!call.call_analysis
-    });
+    // Import database connection (you'll need to add this import at the top of the file)
+    // const db = require('../db/connection');
 
-    // Store the call data in the database
+    // Store the entire request body in the database
     try {
-      // Use UPSERT to insert or update the call record
-      const query = `
-        INSERT INTO calls (call_id, body)
-        VALUES ($1, $2)
-        ON CONFLICT (call_id) 
-        DO UPDATE SET 
-          body = EXCLUDED.body,
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING call_id
-      `;
+      // const query = `
+      //   INSERT INTO calls (call_id, body)
+      //   VALUES ($1, $2)
+      //   ON CONFLICT (call_id) 
+      //   DO UPDATE SET 
+      //     body = EXCLUDED.body,
+      //     updated_at = CURRENT_TIMESTAMP
+      // `;
 
-      const result = await db.query(query, [callId, JSON.stringify(call)]);
+      // await db.query(query, [call.call_id, JSON.stringify(req.body)]);
 
-      logger.info('Call data stored successfully', { 
-        call_id: callId,
-        operation: result.rowCount === 1 ? 'inserted' : 'updated'
-      });
+      logger.info('Call analyzed event stored', { call_id: call.call_id });
 
     } catch (dbError) {
-      logger.error('Failed to store call data in database', {
-        call_id: callId,
-        error: dbError.message,
-        detail: dbError.detail
+      logger.error('Database error', {
+        call_id: call.call_id,
+        error: dbError.message
       });
 
-      // Return error response if database operation fails
       return res.status(500).json({
         success: false,
-        error: 'Failed to store call data',
-        message: dbError.message
+        error: 'Failed to store call data'
       });
     }
 
-    // Process specific call events
-    if (call.call_status === 'ended') {
-      logger.info('Call ended', {
-        call_id: callId,
-        duration: call.end_timestamp && call.start_timestamp ? 
-          (call.end_timestamp - call.start_timestamp) / 1000 + ' seconds' : 'unknown'
-      });
-
-      // Additional processing for ended calls
-      // You could extract and store specific metrics
-      if (call.transcript || call.call_analysis) {
-        try {
-          // Example: Store call metrics in a separate table
-          const metricsQuery = `
-            INSERT INTO call_metrics (call_id, duration, has_transcript, has_recording, analysis_data)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (call_id) DO UPDATE SET
-              duration = EXCLUDED.duration,
-              has_transcript = EXCLUDED.has_transcript,
-              has_recording = EXCLUDED.has_recording,
-              analysis_data = EXCLUDED.analysis_data,
-              updated_at = CURRENT_TIMESTAMP
-          `;
-
-          const duration = call.end_timestamp && call.start_timestamp ? 
-            (call.end_timestamp - call.start_timestamp) / 1000 : null;
-
-          // Note: You'd need to create the call_metrics table first
-          // await db.query(metricsQuery, [
-          //   callId,
-          //   duration,
-          //   !!call.transcript,
-          //   !!call.recording_url,
-          //   call.call_analysis ? JSON.stringify(call.call_analysis) : null
-          // ]);
-
-        } catch (metricsError) {
-          logger.warn('Failed to store call metrics', { error: metricsError.message });
-        }
-      }
-    }
-
-    // Extract and process call analysis if available
-    if (call.call_analysis) {
-      logger.info('Call analysis available', {
-        call_id: callId,
-        analysis_keys: Object.keys(call.call_analysis)
-      });
-    }
-
-    // Prepare response
-    const response = {
+    res.json({
       success: true,
-      message: 'Call update processed successfully',
-      call_id: callId,
-      status: call.call_status,
-      timestamp: new Date().toISOString()
-    };
-
-    // Log the response
-    logger.info('=== RETELL CALL UPDATE RESPONSE ===', {
-      response: response,
-      timestamp: new Date().toISOString()
+      message: 'Call analyzed event stored successfully',
+      call_id: call.call_id
     });
-
-    res.json(response);
 
   } catch (error) {
-    logger.error('Retell call update error', { 
-      error: error.message,
-      stack: error.stack 
-    });
+    logger.error('Call update endpoint error', { error: error.message });
     next(error);
   }
 });
