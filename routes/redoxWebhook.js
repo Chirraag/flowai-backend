@@ -3,7 +3,7 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const redoxApiService = require('../services/redoxApiService');
 const retellService = require('../services/retellService');
-const { authenticate } = require('../middleware/auth');
+const authenticate = require('../middleware/auth');
 
 /**
  * @swagger
