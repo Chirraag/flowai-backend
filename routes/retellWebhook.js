@@ -354,4 +354,162 @@ router.post('/function-call', async (req, res, next) => {
   }
 });
 
+
+router.post('/call/update', async (req, res, next) => {
+  try {
+    // Log the incoming call update
+    logger.info('=== RETELL CALL UPDATE RECEIVED ===', {
+      hasCallData: !!req.body.call,
+      timestamp: new Date().toISOString()
+    });
+
+    const { call } = req.body;
+
+    console.log('Call update received:', call);
+
+    if (!call) {
+      logger.warn('Retell call update failed: missing call data');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing call data in request body'
+      });
+    }
+
+    // Extract call_id from the call object
+    const callId = call.call_id;
+
+    if (!callId) {
+      logger.warn('Retell call update failed: missing call_id');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing call_id in call data'
+      });
+    }
+
+    // Log call details (omitting sensitive data like full transcript)
+    logger.info('Processing call update', {
+      call_id: callId,
+      agent_id: call.agent_id,
+      call_status: call.call_status,
+      start_timestamp: call.start_timestamp,
+      end_timestamp: call.end_timestamp,
+      duration: call.end_timestamp && call.start_timestamp ? 
+        (call.end_timestamp - call.start_timestamp) / 1000 + ' seconds' : 'unknown',
+      has_transcript: !!call.transcript,
+      has_recording_url: !!call.recording_url,
+      has_public_log_url: !!call.public_log_url,
+      has_call_analysis: !!call.call_analysis
+    });
+
+    // Store the call data in the database
+    try {
+      // Use UPSERT to insert or update the call record
+      const query = `
+        INSERT INTO calls (call_id, body)
+        VALUES ($1, $2)
+        ON CONFLICT (call_id) 
+        DO UPDATE SET 
+          body = EXCLUDED.body,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING call_id
+      `;
+
+      const result = await db.query(query, [callId, JSON.stringify(call)]);
+
+      logger.info('Call data stored successfully', { 
+        call_id: callId,
+        operation: result.rowCount === 1 ? 'inserted' : 'updated'
+      });
+
+    } catch (dbError) {
+      logger.error('Failed to store call data in database', {
+        call_id: callId,
+        error: dbError.message,
+        detail: dbError.detail
+      });
+
+      // Return error response if database operation fails
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to store call data',
+        message: dbError.message
+      });
+    }
+
+    // Process specific call events
+    if (call.call_status === 'ended') {
+      logger.info('Call ended', {
+        call_id: callId,
+        duration: call.end_timestamp && call.start_timestamp ? 
+          (call.end_timestamp - call.start_timestamp) / 1000 + ' seconds' : 'unknown'
+      });
+
+      // Additional processing for ended calls
+      // You could extract and store specific metrics
+      if (call.transcript || call.call_analysis) {
+        try {
+          // Example: Store call metrics in a separate table
+          const metricsQuery = `
+            INSERT INTO call_metrics (call_id, duration, has_transcript, has_recording, analysis_data)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (call_id) DO UPDATE SET
+              duration = EXCLUDED.duration,
+              has_transcript = EXCLUDED.has_transcript,
+              has_recording = EXCLUDED.has_recording,
+              analysis_data = EXCLUDED.analysis_data,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+
+          const duration = call.end_timestamp && call.start_timestamp ? 
+            (call.end_timestamp - call.start_timestamp) / 1000 : null;
+
+          // Note: You'd need to create the call_metrics table first
+          // await db.query(metricsQuery, [
+          //   callId,
+          //   duration,
+          //   !!call.transcript,
+          //   !!call.recording_url,
+          //   call.call_analysis ? JSON.stringify(call.call_analysis) : null
+          // ]);
+
+        } catch (metricsError) {
+          logger.warn('Failed to store call metrics', { error: metricsError.message });
+        }
+      }
+    }
+
+    // Extract and process call analysis if available
+    if (call.call_analysis) {
+      logger.info('Call analysis available', {
+        call_id: callId,
+        analysis_keys: Object.keys(call.call_analysis)
+      });
+    }
+
+    // Prepare response
+    const response = {
+      success: true,
+      message: 'Call update processed successfully',
+      call_id: callId,
+      status: call.call_status,
+      timestamp: new Date().toISOString()
+    };
+
+    // Log the response
+    logger.info('=== RETELL CALL UPDATE RESPONSE ===', {
+      response: response,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json(response);
+
+  } catch (error) {
+    logger.error('Retell call update error', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    next(error);
+  }
+});
+
 module.exports = router;
