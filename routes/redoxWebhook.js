@@ -102,18 +102,39 @@ router.post('/webhook/scheduling', async (req, res) => {
  */
 async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
   try {
+    logger.info('=== PROCESS SCHEDULING EVENT START ===', {
+      redoxPatientId,
+      hasBundle: !!bundle,
+      hasPatientResource: !!patientResource,
+      bundleType: bundle?.type,
+      timestamp: new Date().toISOString()
+    });
+    
     // Transform the patient resource to our format
+    logger.info('Transforming FHIR patient to internal format');
     const patientData = transformFhirPatient(patientResource);
     patientData.patientId = redoxPatientId;
     
+    logger.info('Patient data transformed', {
+      patientId: patientData.patientId,
+      fullName: patientData.fullName,
+      hasPhone: !!patientData.phone,
+      phone: patientData.phone ? 'provided' : 'missing'
+    });
+    
     // Get access token for subsequent API calls
+    logger.info('Getting access token for appointment search');
     const accessToken = await authService.getAccessToken();
     patientData.accessToken = accessToken;
+    logger.info('Access token obtained for appointment search');
 
     // Get appointment details for the patient
     let appointments = [];
     try {
+      logger.info('Searching for patient appointments', { patientId: patientData.patientId });
       const searchParams = RedoxTransformer.createAppointmentSearchParams(patientData.patientId);
+      logger.info('Appointment search params created', { searchParams });
+      
       const appointmentResponse = await RedoxAPIService.makeRequest(
         'POST',
         '/Appointment/_search',
@@ -121,9 +142,21 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
         searchParams,
         accessToken
       );
+      
+      logger.info('Appointment search response received', {
+        hasResponse: !!appointmentResponse,
+        hasEntry: !!appointmentResponse?.entry,
+        entryCount: appointmentResponse?.entry?.length || 0
+      });
+      
       appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
+      logger.info('Appointments transformed', { appointmentCount: appointments.length });
     } catch (appointmentError) {
-      logger.warn('Failed to fetch appointments', { error: appointmentError.message });
+      logger.warn('Failed to fetch appointments', { 
+        error: appointmentError.message,
+        stack: appointmentError.stack,
+        patientId: patientData.patientId
+      });
     }
 
     // Find the relevant appointment based on the event
@@ -169,14 +202,31 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
     };
 
     // Validate phone number before triggering call
+    logger.info('Validating patient phone number', {
+      hasPhone: !!patientData.phone,
+      phoneLength: patientData.phone ? patientData.phone.length : 0,
+      phone: patientData.phone || 'NOT_PROVIDED'
+    });
+    
     if (!patientData.phone || patientData.phone.trim() === '') {
       logger.error('Cannot trigger call - no phone number found', {
-        patientId: redoxPatientId
+        patientId: redoxPatientId,
+        patientData: {
+          fullName: patientData.fullName,
+          phone: patientData.phone,
+          email: patientData.email
+        }
       });
       throw new Error('Patient phone number is required for outbound call');
     }
 
     // Trigger outbound call via Retell
+    logger.info('Triggering outbound call via Retell', {
+      phone: patientData.phone,
+      variableCount: Object.keys(dynamicVariables).length,
+      patientId: redoxPatientId
+    });
+    
     await retellService.createPhoneCall(patientData.phone, dynamicVariables);
     
     logger.info('Outbound call triggered successfully', {
@@ -185,7 +235,12 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
     });
 
   } catch (error) {
-    logger.error('Error processing scheduling event', error);
+    logger.error('=== PROCESS SCHEDULING EVENT ERROR ===', {
+      error: error.message,
+      stack: error.stack,
+      redoxPatientId,
+      timestamp: new Date().toISOString()
+    });
     throw error;
   }
 }
@@ -195,9 +250,34 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
  * Transform FHIR patient resource to our internal format
  */
 function transformFhirPatient(fhirPatient) {
+  logger.info('=== TRANSFORM FHIR PATIENT START ===', {
+    patientId: fhirPatient.id,
+    hasName: !!fhirPatient.name,
+    hasTelecom: !!fhirPatient.telecom,
+    hasAddress: !!fhirPatient.address,
+    nameCount: fhirPatient.name?.length || 0,
+    telecomCount: fhirPatient.telecom?.length || 0,
+    addressCount: fhirPatient.address?.length || 0
+  });
+
   const name = fhirPatient.name?.[0] || {};
   const telecom = fhirPatient.telecom || [];
   const address = fhirPatient.address?.[0] || {};
+  
+  logger.info('FHIR patient parsing details', {
+    nameFields: {
+      given: name.given,
+      family: name.family,
+      use: name.use
+    },
+    telecomFields: telecom.map(t => ({ system: t.system, hasValue: !!t.value })),
+    addressFields: {
+      line: address.line,
+      city: address.city,
+      state: address.state,
+      postalCode: address.postalCode
+    }
+  });
   
   const phone = telecom.find(t => t.system === 'phone')?.value || '';
   const email = telecom.find(t => t.system === 'email')?.value || '';
@@ -205,12 +285,27 @@ function transformFhirPatient(fhirPatient) {
   // Build full name and validate it's not empty
   const fullName = `${name.given?.join(' ') || ''} ${name.family || ''}`.trim();
   
+  logger.info('Patient field extraction results', {
+    phone: phone || 'NOT_FOUND',
+    email: email || 'NOT_FOUND', 
+    fullName: fullName || 'NOT_FOUND',
+    patientId: fhirPatient.id
+  });
+  
   // Log warning if critical fields are missing
   if (!phone) {
-    logger.warn('Patient missing phone number', { patientId: fhirPatient.id });
+    logger.warn('Patient missing phone number', { 
+      patientId: fhirPatient.id,
+      telecomEntries: telecom.length,
+      telecomSystems: telecom.map(t => t.system)
+    });
   }
   if (!fullName) {
-    logger.warn('Patient missing name', { patientId: fhirPatient.id });
+    logger.warn('Patient missing name', { 
+      patientId: fhirPatient.id,
+      nameEntries: fhirPatient.name?.length || 0,
+      nameStructure: fhirPatient.name
+    });
   }
   
   return {
@@ -283,14 +378,25 @@ function findRelevantAppointment(appointments, bundle) {
  */
 router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
   try {
+    logger.info('=== TRIGGER SCHEDULING CALL START ===', {
+      requestBody: req.body,
+      timestamp: new Date().toISOString()
+    });
+    
     const { patientId } = req.body;
     
     if (!patientId) {
+      logger.warn('Trigger scheduling call failed: missing patientId', { requestBody: req.body });
       return res.status(400).json({ error: 'Patient ID is required' });
     }
+    
+    logger.info('Processing trigger scheduling call', { patientId });
 
     // Get patient details from Redox
+    logger.info('Getting access token for patient lookup');
     const accessToken = await authService.getAccessToken();
+    logger.info('Access token obtained, making patient lookup request', { patientId });
+    
     const patientResponse = await RedoxAPIService.makeRequest(
       'GET',
       `/Patient/${patientId}`,
@@ -298,13 +404,25 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
       null,
       accessToken
     );
+    
+    logger.info('Patient lookup response received', {
+      hasResponse: !!patientResponse,
+      hasId: !!patientResponse?.id,
+      patientId: patientResponse?.id
+    });
 
     if (!patientResponse || !patientResponse.id) {
+      logger.error('Patient not found in Redox', {
+        patientId,
+        hasResponse: !!patientResponse,
+        responseKeys: patientResponse ? Object.keys(patientResponse) : null
+      });
       return res.status(404).json({ error: 'Patient not found' });
     }
 
     // Generate consistent test ID
     const testId = Date.now();
+    logger.info('Creating mock service request bundle', { testId, patientId });
     
     // Create a mock service-request-created event bundle
     const mockBundle = {
@@ -364,7 +482,20 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
     };
 
     // Process the event
+    logger.info('Processing scheduling event with mock bundle', {
+      patientId,
+      bundleType: mockBundle.type,
+      entryCount: mockBundle.entry.length
+    });
+    
     await processSchedulingEvent(mockBundle, patientId, patientResponse);
+    
+    logger.info('Scheduling event processed successfully');
+    
+    logger.info('=== TRIGGER SCHEDULING CALL SUCCESS ===', {
+      patientId,
+      timestamp: new Date().toISOString()
+    });
     
     res.json({
       success: true,
@@ -373,8 +504,16 @@ router.post('/test/trigger-scheduling-call', authenticate, async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Error triggering test scheduling event', error);
-    res.status(500).json({ error: 'Failed to trigger scheduling event' });
+    logger.error('=== TRIGGER SCHEDULING CALL ERROR ===', {
+      error: error.message,
+      stack: error.stack,
+      patientId: req.body?.patientId,
+      timestamp: new Date().toISOString()
+    });
+    res.status(500).json({ 
+      error: 'Failed to trigger scheduling event',
+      details: error.message
+    });
   }
 });
 
