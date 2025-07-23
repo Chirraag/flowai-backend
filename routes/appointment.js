@@ -43,6 +43,7 @@ const logger = require('../utils/logger');
  *               status:
  *                 type: string
  *                 description: Appointment status (optional, defaults to 'proposed')
+ *                 enum: [proposed, pending, booked, arrived, fulfilled, cancelled, noshow, entered-in-error, checked-in, waitlist]
  *                 example: "proposed"
  *               access_token:
  *                 type: string
@@ -56,7 +57,7 @@ const logger = require('../utils/logger');
  */
 router.post('/create', authMiddleware, async (req, res, next) => {
   try {
-    const { patientId, appointmentType, startTime, endTime } = req.body;
+    const { patientId, appointmentType, startTime, endTime, status } = req.body;
     
     logger.info('Appointment creation request', {
       patientId: patientId ? 'provided' : 'missing',
@@ -75,7 +76,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
     }
 
     const appointmentBundle = RedoxTransformer.createAppointmentBundle(
-      patientId, appointmentType, startTime, endTime
+      patientId, appointmentType, startTime, endTime, status
     );
     
     const redoxResponse = await RedoxAPIService.makeRequest(
@@ -150,6 +151,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
  *               status:
  *                 type: string
  *                 description: Appointment status
+ *                 enum: [proposed, pending, booked, arrived, fulfilled, cancelled, noshow, entered-in-error, checked-in, waitlist]
  *                 example: "booked"
  *               access_token:
  *                 type: string

@@ -44,7 +44,8 @@ class RedoxAPIService {
     }
 
     if (params) {
-      if (method === 'POST') {
+      if (method === 'POST' && !data) {
+        // Only use form data if no JSON data is provided
         const formData = new URLSearchParams(params).toString();
         config.data = formData;
         config.headers['Content-Type'] = 'application/x-www-form-urlencoded';

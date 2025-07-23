@@ -75,32 +75,37 @@ class RedoxTransformer {
         .filter(slot => new Date(slot.startTime) > now); // Only future slots
     }
 
-    // If no future slots found, return dummy slots for next two days
+    // If no future slots found, return exactly 5 dummy slots
     if (slots.length === 0) {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(now.getDate() + 1);
-      tomorrow.setHours(14, 0, 0, 0); // 2:00 PM
-
-      const dayAfter = new Date(now);
-      dayAfter.setDate(now.getDate() + 2);
-      dayAfter.setHours(10, 0, 0, 0); // 10:00 AM
-
-      slots = [
-        {
-          slotId: `dummy-slot-${tomorrow.getTime()}`,
-          startTime: tomorrow.toISOString(),
-          endTime: new Date(tomorrow.getTime() + 30 * 60 * 1000).toISOString(), // 30 minutes later
-          serviceType: "General Consultation",
-          status: "free"
-        },
-        {
-          slotId: `dummy-slot-${dayAfter.getTime()}`,
-          startTime: dayAfter.toISOString(),
-          endTime: new Date(dayAfter.getTime() + 30 * 60 * 1000).toISOString(), // 30 minutes later
-          serviceType: "General Consultation", 
-          status: "free"
-        }
+      const timeSlots = [
+        { day: 1, hour: 10, minute: 0 },  // Tomorrow 10:00 AM
+        { day: 1, hour: 14, minute: 0 },  // Tomorrow 2:00 PM
+        { day: 2, hour: 9, minute: 30 },  // Day after 9:30 AM
+        { day: 3, hour: 15, minute: 0 },  // 3 days later 3:00 PM
+        { day: 4, hour: 11, minute: 0 }   // 4 days later 11:00 AM
       ];
+      
+      const serviceTypes = [
+        "General Consultation",
+        "Follow-up Visit", 
+        "Routine Check-up",
+        "Specialist Consultation",
+        "General Consultation"
+      ];
+
+      slots = timeSlots.map((timeSlot, index) => {
+        const slotDate = new Date(now);
+        slotDate.setDate(now.getDate() + timeSlot.day);
+        slotDate.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
+        
+        return {
+          slotId: `dummy-slot-${slotDate.getTime()}`,
+          startTime: slotDate.toISOString(),
+          endTime: new Date(slotDate.getTime() + 30 * 60 * 1000).toISOString(),
+          serviceType: serviceTypes[index],
+          status: "free"
+        };
+      });
     }
 
     return slots;
@@ -243,6 +248,11 @@ class RedoxTransformer {
   }
 
   static createAppointmentUpdateBundle(appointmentId, patientId, appointmentType, startTime, endTime, status = 'booked') {
+    // Validate status according to FHIR spec
+    const validStatuses = ['proposed', 'pending', 'booked', 'arrived', 'fulfilled', 'cancelled', 'noshow', 'entered-in-error', 'checked-in', 'waitlist'];
+    if (!validStatuses.includes(status)) {
+      status = 'booked'; // Default to 'booked' for updates
+    }
     const appointmentUuid = `urn:uuid:appointment-${uuidv4()}`;
     
     const messageHeader = this.createMessageHeader(
@@ -494,9 +504,10 @@ class RedoxTransformer {
   }
 
   static createAppointmentBundle(patientId, appointmentType, startTime, endTime, status) {
-    // Auto-determine status based on provided information
-    if (!status) {
-      status = 'new';
+    // Validate and set default status according to FHIR spec
+    const validStatuses = ['proposed', 'pending', 'booked', 'arrived', 'fulfilled', 'cancelled', 'noshow', 'entered-in-error', 'checked-in', 'waitlist'];
+    if (!status || !validStatuses.includes(status)) {
+      status = 'proposed'; // Default to 'proposed' for new appointments
     }
     const appointmentUuid = `urn:uuid:appointment-1`;
     
