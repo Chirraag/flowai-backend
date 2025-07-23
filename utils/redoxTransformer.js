@@ -496,7 +496,7 @@ class RedoxTransformer {
   static createAppointmentBundle(patientId, appointmentType, startTime, endTime, status) {
     // Auto-determine status based on provided information
     if (!status) {
-      status = (startTime && endTime) ? 'booked' : 'proposed';
+      status = 'new';
     }
     const appointmentUuid = `urn:uuid:appointment-1`;
     
