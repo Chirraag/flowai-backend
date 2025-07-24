@@ -87,7 +87,7 @@ const retellAgentService = require('../services/retellAgentService');
  *       500:
  *         description: Internal server error
  */
-router.post('/agent/get', async (req, res) => {
+router.post('/get', async (req, res) => {
   try {
     const { agent_id } = req.body;
 
@@ -162,7 +162,7 @@ router.post('/agent/get', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/agent/update', async (req, res) => {
+router.post('/update', async (req, res) => {
   try {
     const { agent_id, ...updateData } = req.body;
 
@@ -221,7 +221,7 @@ router.post('/agent/update', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/agent/list', async (req, res) => {
+router.post('/list', async (req, res) => {
   try {
     const { limit, starting_after, ending_before } = req.body;
 
