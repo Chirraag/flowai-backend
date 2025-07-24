@@ -396,59 +396,58 @@ class RetellAgentService {
       throw error;
     }
   }
-}
 
-/**
- * Create a web call
- * @param {object} webCallData - Web call configuration
- * @returns {Promise<object>} - Web call response with access token
- */
-async createWebCall(webCallData) {
-  try {
-    logger.info('Creating web call', { 
-      agent_id: webCallData.agent_id,
-      hasMetadata: !!webCallData.metadata,
-      hasDynamicVariables: !!webCallData.retell_llm_dynamic_variables
-    });
-
-    if (!this.apiKey) {
-      throw new Error('RETELL_API_KEY not configured');
+  /**
+   * Create a web call
+   * @param {object} webCallData - Web call configuration
+   * @returns {Promise<object>} - Web call response with access token
+   */
+  async createWebCall(webCallData) {
+    try {
+      logger.info('Creating web call', { 
+        agent_id: webCallData.agent_id,
+        hasMetadata: !!webCallData.metadata,
+        hasDynamicVariables: !!webCallData.retell_llm_dynamic_variables
+      });
+  
+      if (!this.apiKey) {
+        throw new Error('RETELL_API_KEY not configured');
+      }
+  
+      // Prepare web call parameters
+      const webCallParams = {
+        agent_id: webCallData.agent_id
+      };
+  
+      // Add optional parameters if provided
+      if (webCallData.metadata) {
+        webCallParams.metadata = webCallData.metadata;
+      }
+  
+      if (webCallData.retell_llm_dynamic_variables) {
+        webCallParams.retell_llm_dynamic_variables = webCallData.retell_llm_dynamic_variables;
+      }
+  
+      logger.info('Calling Retell API to create web call', { webCallParams });
+  
+      const webCallResponse = await this.client.call.createWebCall(webCallParams);
+  
+      logger.info('Web call created successfully', { 
+        call_id: webCallResponse.call_id,
+        call_type: webCallResponse.call_type,
+        hasAccessToken: !!webCallResponse.access_token
+      });
+  
+      return webCallResponse;
+  
+    } catch (error) {
+      logger.error('Error creating web call', {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
     }
-
-    // Prepare web call parameters
-    const webCallParams = {
-      agent_id: webCallData.agent_id
-    };
-
-    // Add optional parameters if provided
-    if (webCallData.metadata) {
-      webCallParams.metadata = webCallData.metadata;
-    }
-
-    if (webCallData.retell_llm_dynamic_variables) {
-      webCallParams.retell_llm_dynamic_variables = webCallData.retell_llm_dynamic_variables;
-    }
-
-    logger.info('Calling Retell API to create web call', { webCallParams });
-
-    const webCallResponse = await this.client.call.createWebCall(webCallParams);
-
-    logger.info('Web call created successfully', { 
-      call_id: webCallResponse.call_id,
-      call_type: webCallResponse.call_type,
-      hasAccessToken: !!webCallResponse.access_token
-    });
-
-    return webCallResponse;
-
-  } catch (error) {
-    logger.error('Error creating web call', {
-      error: error.message,
-      stack: error.stack
-    });
-    throw error;
   }
 }
-
 
 module.exports = new RetellAgentService();
