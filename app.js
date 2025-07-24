@@ -14,6 +14,7 @@ const slotRoutes = require('./routes/slot');
 const appointmentRoutes = require('./routes/appointment');
 const retellWebhookRoutes = require('./routes/retellWebhook');
 const redoxWebhookRoutes = require('./routes/redoxWebhook');
+const retellAgentRoutes = require('./routes/retellAgent');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -120,6 +121,7 @@ app.use('/api/v1/patient', patientCreateRoutes);
 app.use('/api/v1/slot', slotRoutes);
 app.use('/api/v1/appointment', appointmentRoutes);
 app.use('/api/v1/retell', retellWebhookRoutes);
+app.use('/api/v1/retell/agents', retellAgentRoutes);
 app.use('/api/v1/redox', redoxWebhookRoutes);
 
 // Error handling
