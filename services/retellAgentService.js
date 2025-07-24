@@ -1,3 +1,4 @@
+require('dotenv').config();
 const Retell = require('retell-sdk');
 const logger = require('../utils/logger');
 
