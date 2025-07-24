@@ -249,7 +249,7 @@ router.post('/list', async (req, res) => {
 
 /**
  * @swagger
- * /api/v1/retell/conversation-flow/get:
+ * /api/v1/retell/agent/conversation-flow/get:
  *   post:
  *     summary: Get conversation flow details by ID
  *     tags: [Retell Agent]
@@ -313,7 +313,7 @@ router.post('/conversation-flow/get', async (req, res) => {
 
 /**
  * @swagger
- * /api/v1/retell/conversation-flow/update:
+ * /api/v1/retell/agent/conversation-flow/update:
  *   post:
  *     summary: Update conversation flow
  *     tags: [Retell Agent]
@@ -379,7 +379,7 @@ router.post('/conversation-flow/update', async (req, res) => {
 
 /**
  * @swagger
- * /api/v1/retell/conversation-flow/list:
+ * /api/v1/retell/agent/conversation-flow/list:
  *   post:
  *     summary: List all conversation flows
  *     tags: [Retell Agent]
@@ -433,7 +433,7 @@ router.post('/conversation-flow/list', async (req, res) => {
 
 /**
  * @swagger
- * /api/v1/retell/voice/list:
+ * /api/v1/retell/agent/voice/list:
  *   post:
  *     summary: List all available voices
  *     tags: [Retell Agent]
