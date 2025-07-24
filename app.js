@@ -121,7 +121,7 @@ app.use('/api/v1/patient', patientCreateRoutes);
 app.use('/api/v1/slot', slotRoutes);
 app.use('/api/v1/appointment', appointmentRoutes);
 app.use('/api/v1/retell', retellWebhookRoutes);
-app.use('/api/v1/retell/agents', retellAgentRoutes);
+app.use('/api/v1/retell/agent', retellAgentRoutes);
 app.use('/api/v1/redox', redoxWebhookRoutes);
 
 // Error handling
