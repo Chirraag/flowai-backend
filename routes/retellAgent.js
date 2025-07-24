@@ -197,42 +197,53 @@ router.post('/update', async (req, res) => {
  * @swagger
  * /api/v1/retell/agent/list:
  *   post:
- *     summary: List all agents
+ *     summary: List all agents from database
  *     tags: [Retell Agent]
  *     requestBody:
+ *       description: No request body required
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               limit:
- *                 type: integer
- *                 description: Maximum number of agents to return
- *                 example: 10
- *               starting_after:
- *                 type: string
- *                 description: Cursor for pagination (agent_id)
- *               ending_before:
- *                 type: string
- *                 description: Cursor for pagination (agent_id)
  *     responses:
  *       200:
- *         description: List of agents retrieved successfully
+ *         description: List of all agents retrieved successfully from database
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           agent_id:
+ *                             type: string
+ *                             example: "agent_24d6e402758a455c16ec38b558"
+ *                           user_id:
+ *                             type: string
+ *                             example: "xyz"
+ *                           type:
+ *                             type: string
+ *                             example: "patient_intake"
+ *                           status:
+ *                             type: string
+ *                             example: "available"
  *       500:
  *         description: Internal server error
  */
 router.post('/list', async (req, res) => {
   try {
-    const { limit, starting_after, ending_before } = req.body;
+    logger.info('List all agents request from database');
 
-    logger.info('List agents request', { limit, starting_after, ending_before });
-
-    const options = {};
-    if (limit) options.limit = limit;
-    if (starting_after) options.starting_after = starting_after;
-    if (ending_before) options.ending_before = ending_before;
-
-    const agents = await retellAgentService.listAgents(options);
+    const agents = await retellAgentService.listAgents();
 
     res.json({
       success: true,
@@ -246,6 +257,7 @@ router.post('/list', async (req, res) => {
     });
   }
 });
+
 
 /**
  * @swagger

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const Retell = require('retell-sdk');
 const logger = require('../utils/logger');
+const db = require('../db/connection');
 
 class RetellAgentService {
   constructor() {
@@ -80,27 +81,37 @@ class RetellAgentService {
   }
 
   /**
-   * List all agents
-   * @param {object} options - Optional parameters (limit, starting_after, ending_before)
-   * @returns {Promise<object>} - List of agents
+   * List all agents from database
+   * @param {object} options - Optional parameters (not used in simplified version)
+   * @returns {Promise<object>} - List of all agents from database
    */
   async listAgents(options = {}) {
     try {
-      logger.info('Listing agents', { options });
+      logger.info('Listing all agents from database');
 
-      if (!this.apiKey) {
-        throw new Error('RETELL_API_KEY not configured');
-      }
+      // Simple query to get all agents
+      const query = 'SELECT * FROM agents ORDER BY user_id, type';
 
-      const agentsResponse = await this.client.agent.list(options);
+      const result = await db.query(query, []); // Pass empty array for parameters
 
-      logger.info('Agents listed successfully', { 
-        count: agentsResponse.data?.length || 0
+      // Format the response to match expected structure
+      const agents = result.rows.map(row => ({
+        agent_id: row.agent_id,
+        user_id: row.user_id,
+        type: row.type,
+        status: row.status
+      }));
+
+      logger.info('Agents listed successfully from database', { 
+        count: agents.length
       });
 
-      return agentsResponse;
+      return {
+        data: agents
+      };
+
     } catch (error) {
-      logger.error('Error listing agents', {
+      logger.error('Error listing agents from database', {
         error: error.message,
         stack: error.stack
       });
@@ -109,7 +120,7 @@ class RetellAgentService {
   }
 
   /**
-   * Get conversation flow details
+   * Get conversation flow details by ID
    * @param {string} conversationFlowId - The ID of the conversation flow
    * @returns {Promise<object>} - Conversation flow details
    */
