@@ -120,6 +120,71 @@ class RetellAgentService {
   }
 
   /**
+   * Update agent status in database
+   * @param {string} agentId - The agent ID to update
+   * @param {string} status - The new status
+   * @returns {Promise<object>} - Updated result with all agents list
+   */
+  async updateAgentStatus(agentId, status) {
+    try {
+      logger.info('Updating agent status in database', { 
+        agentId,
+        status,
+        userId: 'xyz' // Hardcoded for now
+      });
+
+      // Update query with hardcoded user_id
+      const updateQuery = `
+        UPDATE agents 
+        SET status = $1 
+        WHERE agent_id = $2 AND user_id = $3
+        RETURNING *
+      `;
+
+      const updateParams = [status, agentId, 'xyz'];
+
+      const updateResult = await db.query(updateQuery, updateParams);
+
+      if (updateResult.rowCount === 0) {
+        throw new Error('Agent not found or does not belong to user');
+      }
+
+      logger.info('Agent status updated successfully', { 
+        agentId,
+        newStatus: status,
+        updatedRows: updateResult.rowCount
+      });
+
+      // After updating, fetch all agents (same as listAgents)
+      const listQuery = 'SELECT * FROM agents ORDER BY user_id, type';
+      const listResult = await db.query(listQuery, []);
+
+      // Format the response to match expected structure
+      const agents = listResult.rows.map(row => ({
+        agent_id: row.agent_id,
+        user_id: row.user_id,
+        type: row.type,
+        status: row.status
+      }));
+
+      logger.info('Returning updated agents list', { 
+        count: agents.length
+      });
+
+      return {
+        data: agents
+      };
+
+    } catch (error) {
+      logger.error('Error updating agent status', {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Get conversation flow details by ID
    * @param {string} conversationFlowId - The ID of the conversation flow
    * @returns {Promise<object>} - Conversation flow details

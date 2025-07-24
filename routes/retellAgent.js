@@ -261,6 +261,109 @@ router.post('/list', async (req, res) => {
 
 /**
  * @swagger
+ * /api/v1/retell/agent/update-status:
+ *   post:
+ *     summary: Update agent status and return all agents
+ *     tags: [Retell Agent]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - agent_id
+ *               - status
+ *             properties:
+ *               agent_id:
+ *                 type: string
+ *                 description: The ID of the agent to update
+ *                 example: "agent_24d6e402758a455c16ec38b558"
+ *               status:
+ *                 type: string
+ *                 description: The new status for the agent
+ *                 example: "inactive"
+ *     responses:
+ *       200:
+ *         description: Agent status updated successfully and list of all agents returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Agent status updated successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           agent_id:
+ *                             type: string
+ *                           user_id:
+ *                             type: string
+ *                           type:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *       400:
+ *         description: Missing required fields
+ *       404:
+ *         description: Agent not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/update-status', async (req, res) => {
+  try {
+    const { agent_id, status } = req.body;
+
+    logger.info('Update agent status request', { 
+      agent_id,
+      status,
+      user_id: 'xyz' // Hardcoded for now
+    });
+
+    if (!agent_id || !status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: agent_id and status'
+      });
+    }
+
+    const agents = await retellAgentService.updateAgentStatus(agent_id, status);
+
+    res.json({
+      success: true,
+      message: 'Agent status updated successfully',
+      data: agents
+    });
+  } catch (error) {
+    logger.error('Update agent status error', { error: error.message });
+
+    if (error.message === 'Agent not found or does not belong to user') {
+      return res.status(404).json({
+        success: false,
+        error: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
+/**
+ * @swagger
  * /api/v1/retell/agent/conversation-flow/get:
  *   post:
  *     summary: Get conversation flow details by ID
