@@ -55,7 +55,7 @@ const retellAgentService = require('../services/retellAgentService');
  * @swagger
  * /api/v1/retell/agent/get:
  *   post:
- *     summary: Get agent details by ID
+ *     summary: Get agent details by ID with enhanced data
  *     tags: [Retell Agent]
  *     requestBody:
  *       required: true
@@ -72,7 +72,7 @@ const retellAgentService = require('../services/retellAgentService');
  *                 example: "16b980523634a6dc504898cda492e939"
  *     responses:
  *       200:
- *         description: Agent details retrieved successfully
+ *         description: Agent details retrieved successfully with conversation flow and knowledge base data
  *         content:
  *           application/json:
  *             schema:
@@ -81,7 +81,30 @@ const retellAgentService = require('../services/retellAgentService');
  *                 success:
  *                   type: boolean
  *                 data:
- *                   $ref: '#/components/schemas/Agent'
+ *                   type: object
+ *                   properties:
+ *                     agent_id:
+ *                       type: string
+ *                     agent_name:
+ *                       type: string
+ *                     language:
+ *                       type: string
+ *                       example: "en-US"
+ *                     voice_id:
+ *                       type: string
+ *                       example: "11labs-Cimo"
+ *                     global_prompt:
+ *                       type: string
+ *                       description: Global prompt from conversation flow
+ *                     model:
+ *                       type: string
+ *                       description: Model used in conversation flow
+ *                       example: "gpt-4o"
+ *                     knowledge_bases:
+ *                       type: array
+ *                       description: Array of knowledge base details
+ *                       items:
+ *                         type: object
  *       400:
  *         description: Missing agent_id
  *       500:
@@ -114,7 +137,6 @@ router.post('/get', async (req, res) => {
     });
   }
 });
-
 /**
  * @swagger
  * /api/v1/retell/agent/update:
@@ -590,5 +612,118 @@ router.post('/voice/list', async (req, res) => {
     });
   }
 });
+
+/**
+ * @swagger
+ * /api/v1/retell/agent/create-web-call:
+ *   post:
+ *     summary: Create a web call for an agent
+ *     tags: [Retell Agent]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - agent_id
+ *             properties:
+ *               agent_id:
+ *                 type: string
+ *                 description: The ID of the agent for the web call
+ *                 example: "oBeDLoLOeuAbiuaMFXRtDOLriTJ5tSxD"
+ *               metadata:
+ *                 type: object
+ *                 description: Optional metadata for the call
+ *                 example: { "user_id": "12345", "session_id": "abc123" }
+ *               retell_llm_dynamic_variables:
+ *                 type: object
+ *                 description: Dynamic variables to pass to the LLM
+ *                 example: { "customer_name": "John Doe" }
+ *               custom_sip_headers:
+ *                 type: object
+ *                 description: Custom SIP headers
+ *                 example: { "X-Custom-Header": "Custom Value" }
+ *               opt_out_sensitive_data_storage:
+ *                 type: boolean
+ *                 description: Opt out of sensitive data storage
+ *                 example: true
+ *               opt_in_signed_url:
+ *                 type: boolean
+ *                 description: Opt in for signed URLs
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Web call created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     call_type:
+ *                       type: string
+ *                       example: "web_call"
+ *                     access_token:
+ *                       type: string
+ *                       description: Access token for the web call
+ *                       example: "eyJhbGciOiJIUzI1NiJ9.eyJ2aWRlbyI6eyJyb29tSm9p"
+ *                     call_id:
+ *                       type: string
+ *                       example: "Jabr9TXYYJHfvl6Syypi88rdAHYHmcq6"
+ *                     agent_id:
+ *                       type: string
+ *                       example: "oBeDLoLOeuAbiuaMFXRtDOLriTJ5tSxD"
+ *                     call_status:
+ *                       type: string
+ *                       example: "registered"
+ *       400:
+ *         description: Missing agent_id
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/create-web-call', async (req, res) => {
+  try {
+    const { 
+      agent_id, 
+      metadata, 
+      retell_llm_dynamic_variables,
+      custom_sip_headers
+    } = req.body;
+
+    logger.info('Create web call request', { agent_id });
+
+    if (!agent_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: agent_id'
+      });
+    }
+
+    const webCallData = {
+      agent_id,
+      ...(metadata && { metadata }),
+      ...(retell_llm_dynamic_variables && { retell_llm_dynamic_variables })
+    };
+
+    const webCallResponse = await retellAgentService.createWebCall(webCallData);
+
+    res.json({
+      success: true,
+      data: webCallResponse
+    });
+  } catch (error) {
+    logger.error('Create web call error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 
 module.exports = router;

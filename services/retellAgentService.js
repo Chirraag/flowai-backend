@@ -15,9 +15,9 @@ class RetellAgentService {
   }
 
   /**
-   * Get agent details by agent ID
+   * Get agent details by agent ID with enhanced data
    * @param {string} agentId - The ID of the agent
-   * @returns {Promise<object>} - Agent details
+   * @returns {Promise<object>} - Enhanced agent details with conversation flow and knowledge base data
    */
   async getAgent(agentId) {
     try {
@@ -27,6 +27,7 @@ class RetellAgentService {
         throw new Error('RETELL_API_KEY not configured');
       }
 
+      // Step 1: Get agent details
       const agentResponse = await this.client.agent.retrieve(agentId);
 
       logger.info('Agent details retrieved successfully', { 
@@ -34,7 +35,94 @@ class RetellAgentService {
         agentName: agentResponse.agent_name
       });
 
-      return agentResponse;
+      // Initialize enhanced response
+      const enhancedResponse = {
+        language: agentResponse.language,
+        voice_id: agentResponse.voice_id,
+        global_prompt: null,
+        model: null,
+        knowledge_bases: []
+      };
+
+      // Step 2: Check if agent has conversation flow
+      if (agentResponse.response_engine?.type === 'conversation-flow' && 
+          agentResponse.response_engine?.conversation_flow_id) {
+
+        const conversationFlowId = agentResponse.response_engine.conversation_flow_id;
+        logger.info('Fetching conversation flow details', { conversationFlowId });
+
+        try {
+          // Get conversation flow details
+          const conversationFlowResponse = await this.client.conversationFlow.retrieve(conversationFlowId);
+
+          logger.info('Conversation flow retrieved successfully', { 
+            conversationFlowId: conversationFlowResponse.conversation_flow_id,
+            hasKnowledgeBases: conversationFlowResponse.knowledge_base_ids?.length > 0
+          });
+
+          // Extract global prompt and model
+          enhancedResponse.global_prompt = conversationFlowResponse.global_prompt || null;
+          enhancedResponse.model = conversationFlowResponse.model_choice?.model || null;
+
+          // Step 3: Fetch knowledge base details if any
+          if (conversationFlowResponse.knowledge_base_ids && 
+              conversationFlowResponse.knowledge_base_ids.length > 0) {
+
+            logger.info('Fetching knowledge base details', { 
+              count: conversationFlowResponse.knowledge_base_ids.length 
+            });
+
+            // Fetch all knowledge bases in parallel
+            const knowledgeBasePromises = conversationFlowResponse.knowledge_base_ids.map(async (kbId) => {
+              try {
+                const kbResponse = await this.client.knowledgeBase.retrieve(kbId);
+                logger.info('Knowledge base retrieved', { 
+                  knowledge_base_id: kbResponse.knowledge_base_id 
+                });
+                return kbResponse;
+              } catch (kbError) {
+                logger.error('Error fetching knowledge base', {
+                  knowledge_base_id: kbId,
+                  error: kbError.message
+                });
+                // Return a placeholder for failed fetches
+                return {
+                  knowledge_base_id: kbId,
+                  error: 'Failed to retrieve knowledge base details'
+                };
+              }
+            });
+
+            enhancedResponse.knowledge_bases = await Promise.all(knowledgeBasePromises);
+          }
+
+        } catch (cfError) {
+          logger.error('Error fetching conversation flow', {
+            conversationFlowId,
+            error: cfError.message
+          });
+          // Continue without conversation flow data
+        }
+      }
+
+      // Combine all data
+      const finalResponse = {
+        ...agentResponse,
+        language: enhancedResponse.language,
+        voice_id: enhancedResponse.voice_id,
+        global_prompt: enhancedResponse.global_prompt,
+        model: enhancedResponse.model,
+        knowledge_bases: enhancedResponse.knowledge_bases
+      };
+
+      logger.info('Enhanced agent details prepared', { 
+        agentId,
+        hasGlobalPrompt: !!finalResponse.global_prompt,
+        knowledgeBaseCount: finalResponse.knowledge_bases.length
+      });
+
+      return finalResponse;
+
     } catch (error) {
       logger.error('Error getting agent details', {
         agentId,
@@ -309,5 +397,58 @@ class RetellAgentService {
     }
   }
 }
+
+/**
+ * Create a web call
+ * @param {object} webCallData - Web call configuration
+ * @returns {Promise<object>} - Web call response with access token
+ */
+async createWebCall(webCallData) {
+  try {
+    logger.info('Creating web call', { 
+      agent_id: webCallData.agent_id,
+      hasMetadata: !!webCallData.metadata,
+      hasDynamicVariables: !!webCallData.retell_llm_dynamic_variables
+    });
+
+    if (!this.apiKey) {
+      throw new Error('RETELL_API_KEY not configured');
+    }
+
+    // Prepare web call parameters
+    const webCallParams = {
+      agent_id: webCallData.agent_id
+    };
+
+    // Add optional parameters if provided
+    if (webCallData.metadata) {
+      webCallParams.metadata = webCallData.metadata;
+    }
+
+    if (webCallData.retell_llm_dynamic_variables) {
+      webCallParams.retell_llm_dynamic_variables = webCallData.retell_llm_dynamic_variables;
+    }
+
+    logger.info('Calling Retell API to create web call', { webCallParams });
+
+    const webCallResponse = await this.client.call.createWebCall(webCallParams);
+
+    logger.info('Web call created successfully', { 
+      call_id: webCallResponse.call_id,
+      call_type: webCallResponse.call_type,
+      hasAccessToken: !!webCallResponse.access_token
+    });
+
+    return webCallResponse;
+
+  } catch (error) {
+    logger.error('Error creating web call', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
+}
+
 
 module.exports = new RetellAgentService();
