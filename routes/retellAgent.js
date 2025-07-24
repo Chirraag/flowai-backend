@@ -282,7 +282,7 @@ router.post('/list', async (req, res) => {
  *               status:
  *                 type: string
  *                 description: The new status for the agent
- *                 example: "inactive"
+ *                 example: "active"
  *     responses:
  *       200:
  *         description: Agent status updated successfully and list of all agents returned
