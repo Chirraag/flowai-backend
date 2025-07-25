@@ -137,6 +137,7 @@ router.post('/get', async (req, res) => {
     });
   }
 });
+
 /**
  * @swagger
  * /api/v1/retell/agent/update:
@@ -156,15 +157,25 @@ router.post('/get', async (req, res) => {
  *                 type: string
  *                 description: The ID of the agent to update
  *                 example: "16b980523634a6dc504898cda492e939"
+ *               voice_id:
+ *                 type: string
+ *                 description: Updated voice ID (updates via agent API)
+ *                 example: "11labs-Adrian"
+ *               language:
+ *                 type: string
+ *                 description: Updated language (updates via agent API)
+ *                 example: "en-US"
+ *               global_prompt:
+ *                 type: string
+ *                 description: Updated global prompt (updates via conversation flow API)
+ *                 example: "You are a helpful medical assistant..."
+ *               model:
+ *                 type: string
+ *                 description: Updated model (updates via conversation flow API)
+ *                 example: "gpt-4o"
  *               agent_name:
  *                 type: string
  *                 description: Updated agent name
- *               voice_id:
- *                 type: string
- *                 description: Updated voice ID
- *               language:
- *                 type: string
- *                 description: Updated language
  *               llm_websocket_url:
  *                 type: string
  *                 description: Updated LLM websocket URL
@@ -179,6 +190,32 @@ router.post('/get', async (req, res) => {
  *     responses:
  *       200:
  *         description: Agent updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     agent_id:
+ *                       type: string
+ *                     agent_name:
+ *                       type: string
+ *                     voice_id:
+ *                       type: string
+ *                     language:
+ *                       type: string
+ *                     conversation_flow_updated:
+ *                       type: boolean
+ *                       description: Indicates if conversation flow was updated
+ *                       example: true
+ *                     conversation_flow_id:
+ *                       type: string
+ *                       description: ID of the updated conversation flow (if applicable)
  *       400:
  *         description: Missing agent_id
  *       500:

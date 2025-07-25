@@ -136,7 +136,7 @@ class RetellAgentService {
   /**
    * Update agent details
    * @param {string} agentId - The ID of the agent to update
-   * @param {object} updateData - The data to update
+   * @param {object} updateData - The data to update (voice_id, language, global_prompt, model)
    * @returns {Promise<object>} - Updated agent details
    */
   async updateAgent(agentId, updateData) {
@@ -150,14 +150,101 @@ class RetellAgentService {
         throw new Error('RETELL_API_KEY not configured');
       }
 
-      const agentResponse = await this.client.agent.update(agentId, updateData);
+      // Separate fields based on update type
+      const agentFields = {};
+      const conversationFlowFields = {};
 
-      logger.info('Agent updated successfully', { 
-        agentId: agentResponse.agent_id,
-        agentName: agentResponse.agent_name
+      // Fields that update via agent API
+      if (updateData.voice_id !== undefined) {
+        agentFields.voice_id = updateData.voice_id;
+      }
+      if (updateData.language !== undefined) {
+        agentFields.language = updateData.language;
+      }
+
+      // Fields that update via conversation flow API
+      if (updateData.global_prompt !== undefined) {
+        conversationFlowFields.global_prompt = updateData.global_prompt;
+      }
+      if (updateData.model !== undefined) {
+        conversationFlowFields.model_choice = {
+          model: updateData.model
+        };
+      }
+
+      let agentResponse = null;
+      let conversationFlowResponse = null;
+
+      // Update agent fields if any
+      if (Object.keys(agentFields).length > 0) {
+        logger.info('Updating agent fields', { 
+          agentId,
+          fields: Object.keys(agentFields)
+        });
+
+        agentResponse = await this.client.agent.update(agentId, agentFields);
+
+        logger.info('Agent fields updated successfully', { 
+          agentId: agentResponse.agent_id
+        });
+      }
+
+      // Update conversation flow fields if any
+      if (Object.keys(conversationFlowFields).length > 0) {
+        logger.info('Need to update conversation flow fields', { 
+          agentId,
+          fields: Object.keys(conversationFlowFields)
+        });
+
+        // First, get the agent to find conversation_flow_id
+        const agent = await this.client.agent.retrieve(agentId);
+
+        if (!agent.response_engine?.conversation_flow_id) {
+          throw new Error('Agent does not have a conversation flow configured');
+        }
+
+        const conversationFlowId = agent.response_engine.conversation_flow_id;
+        logger.info('Found conversation flow ID', { conversationFlowId });
+
+        // Update the conversation flow
+        conversationFlowResponse = await this.client.conversationFlow.update(
+          conversationFlowId,
+          conversationFlowFields
+        );
+
+        logger.info('Conversation flow updated successfully', { 
+          conversationFlowId: conversationFlowResponse.conversation_flow_id
+        });
+
+        // If we haven't updated the agent yet, get the latest agent data
+        if (!agentResponse) {
+          agentResponse = agent;
+        }
+      }
+
+      // If neither agent nor conversation flow was updated, just return the current agent
+      if (!agentResponse && !conversationFlowResponse) {
+        agentResponse = await this.client.agent.retrieve(agentId);
+      }
+
+      // Return combined response
+      const response = {
+        ...agentResponse,
+        // Add conversation flow update status if applicable
+        ...(conversationFlowResponse && {
+          conversation_flow_updated: true,
+          conversation_flow_id: conversationFlowResponse.conversation_flow_id
+        })
+      };
+
+      logger.info('Agent update completed', { 
+        agentId,
+        agentFieldsUpdated: Object.keys(agentFields).length > 0,
+        conversationFlowFieldsUpdated: Object.keys(conversationFlowFields).length > 0
       });
 
-      return agentResponse;
+      return response;
+
     } catch (error) {
       logger.error('Error updating agent', {
         agentId,
