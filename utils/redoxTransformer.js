@@ -81,7 +81,7 @@ class RedoxTransformer {
         { day: 1, hour: 10, minute: 0 },  // Tomorrow 10:00 AM
         { day: 1, hour: 14, minute: 0 },  // Tomorrow 2:00 PM
         { day: 2, hour: 9, minute: 30 },  // Day after 9:30 AM
-        { day: 3, hour: 15, minute: 0 },  // 3 days later 3:00 PM
+        { day: 3, hour: 18, minute: 0 },  // 3 days later 3:00 PM
       ];
       
       const serviceTypes = [
