@@ -168,6 +168,7 @@ class RetellAgentService {
       }
       if (updateData.model !== undefined) {
         conversationFlowFields.model_choice = {
+          type: "model",
           model: updateData.model
         };
       }
