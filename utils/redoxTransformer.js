@@ -75,14 +75,13 @@ class RedoxTransformer {
         .filter(slot => new Date(slot.startTime) > now); // Only future slots
     }
 
-    // If no future slots found, return exactly 5 dummy slots
+    // If no future slots found, return exactly 4 dummy slots
     if (slots.length === 0) {
       const timeSlots = [
         { day: 1, hour: 10, minute: 0 },  // Tomorrow 10:00 AM
         { day: 1, hour: 14, minute: 0 },  // Tomorrow 2:00 PM
         { day: 2, hour: 9, minute: 30 },  // Day after 9:30 AM
         { day: 3, hour: 15, minute: 0 },  // 3 days later 3:00 PM
-        { day: 4, hour: 11, minute: 0 }   // 4 days later 11:00 AM
       ];
       
       const serviceTypes = [
