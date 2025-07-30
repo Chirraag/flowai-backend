@@ -378,21 +378,40 @@ class RedoxTransformer {
       });
     }
 
-    // Add insurance contact if provided
-    if (patientData.insuranceName) {
-      patient.resource.contact = [{
-        name: {
-          text: patientData.insuranceName
-        },
-        relationship: [{
-          coding: [{
-            code: 'I',
-            display: 'Insurance Company',
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
-          }],
-          text: 'Insurance Provider'
-        }]
-      }];
+    // Add insurance information if provided
+    if (patientData.insuranceName || patientData.insuranceMemberId) {
+      // Add insurance member ID as an identifier
+      if (patientData.insuranceMemberId) {
+        patient.resource.identifier.push({
+          system: 'urn:redox:flow-ai:insurance',
+          use: 'secondary',
+          value: patientData.insuranceMemberId,
+          type: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: 'MB',
+              display: 'Member Number'
+            }]
+          }
+        });
+      }
+      
+      // Add insurance contact if name is provided
+      if (patientData.insuranceName) {
+        patient.resource.contact = [{
+          name: {
+            text: patientData.insuranceName
+          },
+          relationship: [{
+            coding: [{
+              code: 'I',
+              display: 'Insurance Company',
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
+            }],
+            text: 'Insurance Provider'
+          }]
+        }];
+      }
     }
 
     const messageHeader = {
@@ -476,21 +495,40 @@ class RedoxTransformer {
       });
     }
 
-    // Add insurance contact if provided
-    if (patientData.insuranceName) {
-      patient.resource.contact = [{
-        name: {
-          text: patientData.insuranceName
-        },
-        relationship: [{
-          coding: [{
-            code: 'I',
-            display: 'Insurance Company',
-            system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
-          }],
-          text: 'Insurance Provider'
-        }]
-      }];
+    // Add insurance information if provided
+    if (patientData.insuranceName || patientData.insuranceMemberId) {
+      // Add insurance member ID as an identifier
+      if (patientData.insuranceMemberId) {
+        patient.resource.identifier.push({
+          system: 'urn:redox:flow-ai:insurance',
+          use: 'secondary',
+          value: patientData.insuranceMemberId,
+          type: {
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: 'MB',
+              display: 'Member Number'
+            }]
+          }
+        });
+      }
+      
+      // Add insurance contact if name is provided
+      if (patientData.insuranceName) {
+        patient.resource.contact = [{
+          name: {
+            text: patientData.insuranceName
+          },
+          relationship: [{
+            coding: [{
+              code: 'I',
+              display: 'Insurance Company',
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
+            }],
+            text: 'Insurance Provider'
+          }]
+        }];
+      }
     }
 
     return {

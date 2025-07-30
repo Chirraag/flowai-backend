@@ -178,7 +178,7 @@ router.post('/webhook', async (req, res, next) => {
  *                     description: Access token from call context
  *               name:
  *                 type: string
- *                 enum: [check_availability, book_appointment, update_appointment]
+ *                 enum: [check_availability, book_appointment, update_appointment, create_patient]
  *                 description: Function name
  *               args:
  *                 type: object
@@ -322,6 +322,68 @@ router.post('/function-call', async (req, res, next) => {
         );
         
         result = RedoxTransformer.transformAppointmentCreateResponse(updateResponse);
+        break;
+
+      case 'create_patient':
+        logger.info('Processing create_patient function call');
+        
+        // Extract patient creation parameters from args
+        const {
+          first_name,
+          last_name,
+          phone: patientPhone,
+          email: patientEmail,
+          dob,
+          address: patientAddress,
+          city: patientCity,
+          state: patientState,
+          zip_code,
+          insurance_name,
+          insurance_member_id
+        } = args;
+        
+        // Validate required fields
+        if (!first_name || !last_name) {
+          return res.status(400).json({
+            success: false,
+            error: 'Missing required fields for patient creation: first_name, last_name'
+          });
+        }
+
+        const patientData = {
+          firstName: first_name,
+          lastName: last_name,
+          phone: patientPhone,
+          email: patientEmail,
+          birthDate: dob,
+          address: patientAddress,
+          city: patientCity,
+          state: patientState,
+          zipCode: zip_code,
+          insuranceName: insurance_name,
+          insuranceMemberId: insurance_member_id
+        };
+
+        const patientBundle = RedoxTransformer.createPatientBundle(patientData);
+        
+        const patientCreateResponse = await RedoxAPIService.makeRequest(
+          'POST',
+          '/Patient/$patient-create',
+          patientBundle,
+          null,
+          accessToken
+        );
+        
+        // Transform the response to extract patient ID
+        const createResult = RedoxTransformer.transformAppointmentCreateResponse(patientCreateResponse);
+        
+        // Return the patient ID as the result
+        result = {
+          success: createResult.success,
+          patientId: createResult.generatedId || null,
+          statusCode: createResult.statusCode,
+          error: createResult.error || null
+        };
         break;
 
       default:
