@@ -173,9 +173,6 @@ class RetellAgentService {
         };
       }
 
-      let agentResponse = null;
-      let conversationFlowResponse = null;
-
       // Update agent fields if any
       if (Object.keys(agentFields).length > 0) {
         logger.info('Updating agent fields', { 
@@ -183,10 +180,10 @@ class RetellAgentService {
           fields: Object.keys(agentFields)
         });
 
-        agentResponse = await this.client.agent.update(agentId, agentFields);
+        await this.client.agent.update(agentId, agentFields);  // ← CHANGED: Don't store response
 
         logger.info('Agent fields updated successfully', { 
-          agentId: agentResponse.agent_id
+          agentId
         });
       }
 
@@ -208,35 +205,17 @@ class RetellAgentService {
         logger.info('Found conversation flow ID', { conversationFlowId });
 
         // Update the conversation flow
-        conversationFlowResponse = await this.client.conversationFlow.update(
+        await this.client.conversationFlow.update(  // ← CHANGED: Don't store response
           conversationFlowId,
           conversationFlowFields
         );
 
         logger.info('Conversation flow updated successfully', { 
-          conversationFlowId: conversationFlowResponse.conversation_flow_id
+          conversationFlowId
         });
-
-        // If we haven't updated the agent yet, get the latest agent data
-        if (!agentResponse) {
-          agentResponse = agent;
-        }
       }
 
-      // If neither agent nor conversation flow was updated, just return the current agent
-      if (!agentResponse && !conversationFlowResponse) {
-        agentResponse = await this.client.agent.retrieve(agentId);
-      }
-
-      // Return combined response
-      const response = {
-        ...agentResponse,
-        // Add conversation flow update status if applicable
-        ...(conversationFlowResponse && {
-          conversation_flow_updated: true,
-          conversation_flow_id: conversationFlowResponse.conversation_flow_id
-        })
-      };
+      const enhancedAgentDetails = await this.getAgent(agentId);
 
       logger.info('Agent update completed', { 
         agentId,
@@ -244,7 +223,7 @@ class RetellAgentService {
         conversationFlowFieldsUpdated: Object.keys(conversationFlowFields).length > 0
       });
 
-      return response;
+      return enhancedAgentDetails;  // ← CHANGED: Return the enhanced details
 
     } catch (error) {
       logger.error('Error updating agent', {

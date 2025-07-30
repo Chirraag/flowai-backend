@@ -5,6 +5,7 @@ const RedoxTransformer = require('../utils/redoxTransformer');
 const RedoxAPIService = require('../services/redoxApiService');
 const AuthService = require('../services/authService');
 const logger = require('../utils/logger');
+const db = require('../db/connection'); 
 
 const authService = new AuthService();
 
@@ -452,6 +453,7 @@ router.post('/function-call', async (req, res, next) => {
  */
 router.post('/call/update', async (req, res, next) => {
   try {
+    console.log("hit");
     const { event, call } = req.body;
 
     // Only process if event is 'call_analyzed'
@@ -462,8 +464,6 @@ router.post('/call/update', async (req, res, next) => {
       });
     }
 
-    console.log(req.body.call);
-
     if (!call || !call.call_id) {
       return res.status(400).json({
         success: false,
@@ -471,44 +471,179 @@ router.post('/call/update', async (req, res, next) => {
       });
     }
 
-    // Import database connection (you'll need to add this import at the top of the file)
-    // const db = require('../db/connection');
+    // Import database connection
+    const db = require('../db/connection');
 
-    // Store the entire request body in the database
     try {
-      // const query = `
-      //   INSERT INTO calls (call_id, body)
-      //   VALUES ($1, $2)
-      //   ON CONFLICT (call_id) 
-      //   DO UPDATE SET 
-      //     body = EXCLUDED.body,
-      //     updated_at = CURRENT_TIMESTAMP
-      // `;
+      // Start a transaction to ensure data consistency
+      await db.query('BEGIN');
 
-      // await db.query(query, [call.call_id, JSON.stringify(req.body)]);
+      // 1. Check if this call_id already exists (idempotency check)
+      const existingCallResult = await db.query(
+        'SELECT call_id FROM calls WHERE call_id = $1',
+        [call.call_id]
+      );
 
-      logger.info('Call analyzed event stored', { call_id: call.call_id });
+      if (existingCallResult.rows.length > 0) {
+        await db.query('ROLLBACK');
+        logger.info('Call already processed', { call_id: call.call_id });
+        return res.json({
+          success: true,
+          message: 'Call already processed',
+          call_id: call.call_id
+        });
+      }
+
+      // 2. Insert into calls table
+      const insertCallQuery = `
+        INSERT INTO calls (call_id, body)
+        VALUES ($1, $2)
+      `;
+      await db.query(insertCallQuery, [call.call_id, JSON.stringify(req.body)]);
+
+      // 3. Get current agent analytics
+      const agentResult = await db.query(
+        'SELECT * FROM agents WHERE agent_id = $1',
+        [call.agent_id]
+      );
+
+      // if (agentResult.rows.length === 0) {
+      //   // If agent doesn't exist, create it with initial values
+      //   const insertAgentQuery = `
+      //     INSERT INTO agents (
+      //       agent_id, 
+      //       user_id, 
+      //       type, 
+      //       status, 
+      //       total_calls,
+      //       disconnection_reason,
+      //       average_latency,
+      //       user_sentiment,
+      //       call_successful
+      //     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      //   `;
+
+      //   // Initialize JSON objects for tracking
+      //   const disconnectionReason = { [call.disconnection_reason]: 1 };
+      //   const userSentiment = { [call.call_analysis.user_sentiment]: 1 };
+      //   const callSuccessful = { [String(call.call_analysis.call_successful)]: 1 };
+
+      //   // Calculate initial average latency (using p50 values)
+      //   const avgLatency = (call.latency.llm.p50 + call.latency.tts.p50) / 2;
+
+      //   await db.query(insertAgentQuery, [
+      //     call.agent_id,
+      //     'xyz', // Default user_id
+      //     'scheduling', // Default type
+      //     'active', // Default status
+      //     1, // total_calls
+      //     JSON.stringify(disconnectionReason),
+      //     avgLatency,
+      //     JSON.stringify(userSentiment),
+      //     JSON.stringify(callSuccessful)
+      //   ]);
+      // } else {
+      //   // Update existing agent analytics
+      //   const agent = agentResult.rows[0];
+
+      //   // 4a. Increment total_calls
+      //   const newTotalCalls = (agent.total_calls || 0) + 1;
+
+      //   // 4b. Update disconnection_reason JSON
+      //   let disconnectionReasonData = {};
+      //   try {
+      //     disconnectionReasonData = agent.disconnection_reason || {};
+      //   } catch (e) {
+      //     disconnectionReasonData = {};
+      //   }
+      //   disconnectionReasonData[call.disconnection_reason] = (disconnectionReasonData[call.disconnection_reason] || 0) + 1;
+
+      //   // 4c. Recalculate average latency
+      //   const currentAvgLatency = agent.average_latency || 0;
+      //   const currentTotalCalls = agent.total_calls || 0;
+      //   const newLatency = (call.latency.llm.p50 + call.latency.tts.p50) / 2;
+      //   const newAvgLatency = ((currentAvgLatency * currentTotalCalls) + newLatency) / newTotalCalls;
+
+      //   // 4d. Update user_sentiment JSON
+      //   let userSentimentData = {};
+      //   try {
+      //     userSentimentData = agent.user_sentiment || {};
+      //   } catch (e) {
+      //     userSentimentData = {};
+      //   }
+      //   userSentimentData[call.call_analysis.user_sentiment] = (userSentimentData[call.call_analysis.user_sentiment] || 0) + 1;
+
+      //   // 4e. Update call_successful JSON
+      //   let callSuccessfulData = {};
+      //   try {
+      //     callSuccessfulData = agent.call_successful || {};
+      //   } catch (e) {
+      //     callSuccessfulData = {};
+      //   }
+      //   const successKey = String(call.call_analysis.call_successful);
+      //   callSuccessfulData[successKey] = (callSuccessfulData[successKey] || 0) + 1;
+
+      //   // Update the agent record
+      //   const updateAgentQuery = `
+      //     UPDATE agents 
+      //     SET 
+      //       total_calls = $2,
+      //       disconnection_reason = $3,
+      //       average_latency = $4,
+      //       user_sentiment = $5,
+      //       call_successful = $6,
+      //       updated_at = CURRENT_TIMESTAMP
+      //     WHERE agent_id = $1
+      //   `;
+
+      //   await db.query(updateAgentQuery, [
+      //     call.agent_id,
+      //     newTotalCalls,
+      //     JSON.stringify(disconnectionReasonData),
+      //     newAvgLatency,
+      //     JSON.stringify(userSentimentData),
+      //     JSON.stringify(callSuccessfulData)
+      //   ]);
+      // }
+
+      // Commit the transaction
+      await db.query('COMMIT');
+
+      logger.info('Call analyzed event processed successfully', { 
+        call_id: call.call_id,
+        agent_id: call.agent_id,
+        disconnection_reason: call.disconnection_reason,
+        user_sentiment: call.call_analysis.user_sentiment,
+        call_successful: call.call_analysis.call_successful
+      });
+
+      res.json({
+        success: true,
+        message: 'Call analyzed event processed successfully',
+        call_id: call.call_id,
+        agent_id: call.agent_id
+      });
 
     } catch (dbError) {
-      logger.error('Database error', {
+      await db.query('ROLLBACK');
+      logger.error('Database error processing call update', {
         call_id: call.call_id,
-        error: dbError.message
+        error: dbError.message,
+        stack: dbError.stack
       });
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to store call data'
+        error: 'Failed to process call data',
+        details: dbError.message
       });
     }
 
-    res.json({
-      success: true,
-      message: 'Call analyzed event stored successfully',
-      call_id: call.call_id
-    });
-
   } catch (error) {
-    logger.error('Call update endpoint error', { error: error.message });
+    logger.error('Call update endpoint error', { 
+      error: error.message,
+      stack: error.stack 
+    });
     next(error);
   }
 });
