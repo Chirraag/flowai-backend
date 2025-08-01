@@ -1,13 +1,17 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const authMiddleware = require('../middleware/auth');
-const RedoxTransformer = require('../utils/redoxTransformer');
-const RedoxAPIService = require('../services/redoxApiService');
-const AuthService = require('../services/authService');
-const logger = require('../utils/logger');
-const db = require('../db/connection'); 
+const authMiddleware = require("../middleware/auth");
+const RedoxTransformer = require("../utils/redoxTransformer");
+const RedoxAPIService = require("../services/redoxApiService");
+const AuthService = require("../services/authService");
+const logger = require("../utils/logger");
+const db = require("../db/connection");
+const { Resend } = require("resend");
 
 const authService = new AuthService();
+
+// Initialize Resend with API key
+const resend = new Resend("re_RqyutRoZ_FzgFQ1SVV8qd7RAUmjX4o79B");
 
 /**
  * @swagger
@@ -33,77 +37,86 @@ const authService = new AuthService();
  *       200:
  *         description: Patient and appointment data for call
  */
-router.post('/webhook', async (req, res, next) => {
+router.post("/webhook", async (req, res, next) => {
   try {
     // Log complete webhook request body
-    logger.info('=== RETELL WEBHOOK RECEIVED ===', {
+    logger.info("=== RETELL WEBHOOK RECEIVED ===", {
       requestBody: JSON.stringify(req.body, null, 2),
       headers: req.headers,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const { call_inbound } = req.body;
-    
+
     if (!call_inbound || !call_inbound.from_number) {
-      logger.warn('Retell webhook failed: missing call_inbound or from_number', {
-        receivedBody: req.body
-      });
+      logger.warn(
+        "Retell webhook failed: missing call_inbound or from_number",
+        {
+          receivedBody: req.body,
+        },
+      );
       return res.status(400).json({
         success: false,
-        error: 'Missing call_inbound.from_number in request'
+        error: "Missing call_inbound.from_number in request",
       });
     }
 
     const { from_number } = call_inbound;
-    logger.info('Retell webhook - call inbound processed', { 
+    logger.info("Retell webhook - call inbound processed", {
       from_number,
-      call_inbound: call_inbound 
+      call_inbound: call_inbound,
     });
 
     // Get access token
     const accessToken = await authService.getAccessToken();
 
     // Search for patient by phone number
-    const patientSearchParams = RedoxTransformer.createPatientSearchParams(from_number);
+    const patientSearchParams =
+      RedoxTransformer.createPatientSearchParams(from_number);
     const patientResponse = await RedoxAPIService.makeRequest(
-      'POST',
-      '/Patient/_search',
+      "POST",
+      "/Patient/_search",
       null,
       patientSearchParams,
-      accessToken
+      accessToken,
     );
 
     // Transform patient response
-    const patients = RedoxTransformer.transformPatientSearchResponse(patientResponse);
-    
+    const patients =
+      RedoxTransformer.transformPatientSearchResponse(patientResponse);
+
     let appointments = [];
     let patientData = null;
 
     if (patients.length > 0) {
       patientData = {
         ...patients[0],
-        accessToken: accessToken
+        accessToken: accessToken,
       };
 
       // Search for appointments using patient ID
-      const appointmentSearchParams = RedoxTransformer.createAppointmentSearchParams(patients[0].patientId);
+      const appointmentSearchParams =
+        RedoxTransformer.createAppointmentSearchParams(patients[0].patientId);
       const appointmentResponse = await RedoxAPIService.makeRequest(
-        'POST',
-        '/Appointment/_search',
+        "POST",
+        "/Appointment/_search",
         null,
         appointmentSearchParams,
-        accessToken
+        accessToken,
       );
 
       // Transform appointment response
-      appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
+      appointments =
+        RedoxTransformer.transformAppointmentSearchResponse(
+          appointmentResponse,
+        );
     }
 
     // Prepare response for Retell inbound call webhook format (all values must be strings)
     const dynamicVariables = {
       caller_phone: from_number,
       patient_found: patients.length > 0 ? "true" : "false",
-      access_token: accessToken
+      access_token: accessToken,
     };
 
     // Add individual patient details as separate dynamic variables (all as strings)
@@ -117,7 +130,8 @@ router.post('/webhook', async (req, res, next) => {
       dynamicVariables.patient_address = patientData.address || "";
       dynamicVariables.insurance_name = patientData.insuranceName || "";
       dynamicVariables.insurance_type = patientData.insuranceType || "";
-      dynamicVariables.insurance_member_id = patientData.insuranceMemberId || "";
+      dynamicVariables.insurance_member_id =
+        patientData.insuranceMemberId || "";
     }
 
     // Add appointment details as separate dynamic variables (all as strings)
@@ -135,25 +149,25 @@ router.post('/webhook', async (req, res, next) => {
         dynamic_variables: dynamicVariables,
         metadata: {
           success: true,
-          timestamp: new Date().toISOString()
-        }
-      }
+          timestamp: new Date().toISOString(),
+        },
+      },
     };
 
-    logger.info('Retell webhook completed', { 
+    logger.info("Retell webhook completed", {
       patientFound: patients.length > 0,
-      appointmentFound: appointments.length > 0 
+      appointmentFound: appointments.length > 0,
     });
 
     // Log complete webhook response
-    logger.info('=== RETELL WEBHOOK RESPONSE ===', {
+    logger.info("=== RETELL WEBHOOK RESPONSE ===", {
       responseBody: JSON.stringify(retellResponse, null, 2),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     res.json(retellResponse);
   } catch (error) {
-    logger.error('Retell webhook error', { error: error.message });
+    logger.error("Retell webhook error", { error: error.message });
     next(error);
   }
 });
@@ -192,142 +206,180 @@ router.post('/webhook', async (req, res, next) => {
  *       200:
  *         description: Function call result
  */
-router.post('/function-call', async (req, res, next) => {
+router.post("/function-call", async (req, res, next) => {
   try {
     // Log function call request body (excluding transcript and transcript_object for cleaner logs)
     const logBody = {
       ...req.body,
-      call: req.body.call ? {
-        ...req.body.call,
-        transcript: req.body.call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
-        transcript_object: req.body.call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined,
-        transcript_with_tool_calls: req.body.call.transcript_with_tool_calls ? '[TRANSCRIPT WITH TOOL CALLS OMITTED]' : undefined
-      } : undefined
+      call: req.body.call
+        ? {
+            ...req.body.call,
+            transcript: req.body.call.transcript
+              ? "[TRANSCRIPT OMITTED]"
+              : undefined,
+            transcript_object: req.body.call.transcript_object
+              ? "[TRANSCRIPT OBJECT OMITTED]"
+              : undefined,
+            transcript_with_tool_calls: req.body.call.transcript_with_tool_calls
+              ? "[TRANSCRIPT WITH TOOL CALLS OMITTED]"
+              : undefined,
+          }
+        : undefined,
     };
-    
-    logger.info('=== RETELL FUNCTION CALL RECEIVED ===', {
+
+    logger.info("=== RETELL FUNCTION CALL RECEIVED ===", {
       requestBody: JSON.stringify(logBody, null, 2),
       headers: req.headers,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     const { call, name, args } = req.body;
-    
-    logger.info('Retell function call processed', { 
+
+    logger.info("Retell function call processed", {
       functionName: name,
       hasArgs: !!args,
       hasCall: !!call,
       args: args,
-      call: call ? { 
-        ...call, 
-        transcript: call.transcript ? '[TRANSCRIPT OMITTED]' : undefined,
-        transcript_object: call.transcript_object ? '[TRANSCRIPT OBJECT OMITTED]' : undefined,
-        transcript_with_tool_calls: req.body.call.transcript_with_tool_calls ? '[TRANSCRIPT WITH TOOL CALLS OMITTED]' : undefined
-      } : undefined
+      call: call
+        ? {
+            ...call,
+            transcript: call.transcript ? "[TRANSCRIPT OMITTED]" : undefined,
+            transcript_object: call.transcript_object
+              ? "[TRANSCRIPT OBJECT OMITTED]"
+              : undefined,
+            transcript_with_tool_calls: req.body.call.transcript_with_tool_calls
+              ? "[TRANSCRIPT WITH TOOL CALLS OMITTED]"
+              : undefined,
+          }
+        : undefined,
     });
 
     if (!name || !args) {
-      logger.warn('Retell function call failed: missing name or args', {
-        receivedBody: req.body
+      logger.warn("Retell function call failed: missing name or args", {
+        receivedBody: req.body,
       });
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: name and args'
+        error: "Missing required fields: name and args",
       });
     }
 
     // Get access token from args only, otherwise generate new one
-    const accessToken = args?.access_token || await authService.getAccessToken();
-    
+    const accessToken =
+      args?.access_token || (await authService.getAccessToken());
+
     let result;
 
     switch (name) {
-      case 'check_availability':
-        logger.info('Processing check_availability function call');
-        
+      case "check_availability":
+        logger.info("Processing check_availability function call");
+
         // Extract slot search parameters from args
         const { location, serviceType, startTime } = args;
-        
-        const slotSearchParams = RedoxTransformer.createSlotSearchParams(location, serviceType, startTime);
+
+        const slotSearchParams = RedoxTransformer.createSlotSearchParams(
+          location,
+          serviceType,
+          startTime,
+        );
         const slotResponse = await RedoxAPIService.makeRequest(
-          'POST',
-          '/Slot/_search',
+          "POST",
+          "/Slot/_search",
           null,
           slotSearchParams,
-          accessToken
+          accessToken,
         );
-        
+
         result = RedoxTransformer.transformSlotSearchResponse(slotResponse);
         break;
 
-      case 'book_appointment':
-        logger.info('Processing book_appointment function call');
-        
+      case "book_appointment":
+        logger.info("Processing book_appointment function call");
+
         // Extract appointment creation parameters from args
-        const { patientId, slotId, appointmentType, startTime: apptStart, endTime, status } = args;
-        
+        const {
+          patientId,
+          slotId,
+          appointmentType,
+          startTime: apptStart,
+          endTime,
+          status,
+        } = args;
+
         // Only patientId is required according to Redox (for participant reference)
         if (!patientId) {
           return res.status(400).json({
             success: false,
-            error: 'Missing required field for appointment booking: patientId'
+            error: "Missing required field for appointment booking: patientId",
           });
         }
 
         const appointmentBundle = RedoxTransformer.createAppointmentBundle(
-          patientId, appointmentType, apptStart, endTime, status
+          patientId,
+          appointmentType,
+          apptStart,
+          endTime,
+          status,
         );
-        
+
         const createResponse = await RedoxAPIService.makeRequest(
-          'POST',
-          '/Appointment/$appointment-create',
+          "POST",
+          "/Appointment/$appointment-create",
           appointmentBundle,
           null,
-          accessToken
+          accessToken,
         );
-        
-        result = RedoxTransformer.transformAppointmentCreateResponse(createResponse);
+
+        result =
+          RedoxTransformer.transformAppointmentCreateResponse(createResponse);
         break;
 
-      case 'update_appointment':
-        logger.info('Processing update_appointment function call');
-        
+      case "update_appointment":
+        logger.info("Processing update_appointment function call");
+
         // Extract appointment update parameters from args
-        const { 
-          appointmentId, 
-          patientId: updatePatientId, 
-          appointmentType: updateType, 
-          startTime: updateStart, 
-          endTime: updateEnd, 
-          status: updateStatus 
+        const {
+          appointmentId,
+          patientId: updatePatientId,
+          appointmentType: updateType,
+          startTime: updateStart,
+          endTime: updateEnd,
+          status: updateStatus,
         } = args;
-        
+
         // Only appointmentId and patientId are required for update
         if (!appointmentId || !updatePatientId) {
           return res.status(400).json({
             success: false,
-            error: 'Missing required fields for appointment update: appointmentId, patientId'
+            error:
+              "Missing required fields for appointment update: appointmentId, patientId",
           });
         }
 
         const updateBundle = RedoxTransformer.createAppointmentUpdateBundle(
-          appointmentId, updatePatientId, updateType, updateStart, updateEnd, updateStatus
+          appointmentId,
+          updatePatientId,
+          updateType,
+          updateStart,
+          updateEnd,
+          updateStatus,
         );
-        
+
         const updateResponse = await RedoxAPIService.makeRequest(
-          'POST',
-          '/Appointment/$appointment-update',
+          "POST",
+          "/Appointment/$appointment-update",
           updateBundle,
           null,
-          accessToken
+          accessToken,
         );
-        
-        result = RedoxTransformer.transformAppointmentCreateResponse(updateResponse);
+
+        result =
+          RedoxTransformer.transformAppointmentCreateResponse(updateResponse);
         break;
 
-      case 'create_patient':
-        logger.info('Processing create_patient function call');
-        
+      case "create_patient":
+        logger.info("Processing create_patient function call");
+
         // Extract patient creation parameters from args
         const {
           first_name,
@@ -340,14 +392,15 @@ router.post('/function-call', async (req, res, next) => {
           state: patientState,
           zip_code,
           insurance_name,
-          insurance_member_id
+          insurance_member_id,
         } = args;
-        
+
         // Validate required fields
         if (!first_name || !last_name) {
           return res.status(400).json({
             success: false,
-            error: 'Missing required fields for patient creation: first_name, last_name'
+            error:
+              "Missing required fields for patient creation: first_name, last_name",
           });
         }
 
@@ -362,61 +415,67 @@ router.post('/function-call', async (req, res, next) => {
           state: patientState,
           zipCode: zip_code,
           insuranceName: insurance_name,
-          insuranceMemberId: insurance_member_id
+          insuranceMemberId: insurance_member_id,
         };
 
         const patientBundle = RedoxTransformer.createPatientBundle(patientData);
-        
+
         const patientCreateResponse = await RedoxAPIService.makeRequest(
-          'POST',
-          '/Patient/$patient-create',
+          "POST",
+          "/Patient/$patient-create",
           patientBundle,
           null,
-          accessToken
+          accessToken,
         );
-        
+
         // Transform the response to extract patient ID
-        const createResult = RedoxTransformer.transformAppointmentCreateResponse(patientCreateResponse);
-        
+        const createResult =
+          RedoxTransformer.transformAppointmentCreateResponse(
+            patientCreateResponse,
+          );
+
         // Return the patient ID as the result
         result = {
           success: createResult.success,
           patientId: createResult.generatedId || null,
           statusCode: createResult.statusCode,
-          error: createResult.error || null
+          error: createResult.error || null,
         };
         break;
 
       default:
-        logger.warn('Unsupported function call received', { functionName: name });
+        logger.warn("Unsupported function call received", {
+          functionName: name,
+        });
         return res.status(400).json({
           success: false,
-          error: `Unsupported function: ${name}`
+          error: `Unsupported function: ${name}`,
         });
     }
 
     const functionResponse = {
       success: true,
       function: name,
-      result: result
+      result: result,
     };
 
-    logger.info('Retell function call completed', { functionName: name });
-    
+    logger.info("Retell function call completed", { functionName: name });
+
     // Log complete function call response
-    logger.info('=== RETELL FUNCTION CALL RESPONSE ===', {
+    logger.info("=== RETELL FUNCTION CALL RESPONSE ===", {
       responseBody: JSON.stringify(functionResponse, null, 2),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     res.json(functionResponse);
-
   } catch (error) {
-    logger.error('Retell function call error', { error: error.message, functionName: req.body?.name || 'unknown' });
+    logger.error("Retell function call error", {
+      error: error.message,
+      functionName: req.body?.name || "unknown",
+    });
     next(error);
   }
 });
-
 
 // Add this endpoint to your existing retellWebhook.js file, after the existing endpoints
 
@@ -451,46 +510,56 @@ router.post('/function-call', async (req, res, next) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/call/update', async (req, res, next) => {
+router.post("/call/update", async (req, res, next) => {
   try {
     console.log("hit");
     const { event, call } = req.body;
 
     // Only process if event is 'call_analyzed'
-    if (event !== 'call_analyzed') {
+    if (event !== "call_analyzed") {
       return res.json({
         success: true,
-        message: `Event ${event} acknowledged but not stored`
+        message: `Event ${event} acknowledged but not stored`,
       });
     }
+
+    const recepientEmail = call.retell_llm_dynamic_variables.patient_email;
+
+    const emailData = {
+      from: "myflow@no-reply.vexalink.com",
+      to: recepientEmail,
+      subject: `Appointment Confirmation`,
+      text: `Your appointment has been confirmed`,
+    };
+
+    // Send email using Resend
+    const { data, error } = await resend.emails.send(emailData);
 
     if (!call || !call.call_id) {
       return res.status(400).json({
         success: false,
-        error: 'Missing call data or call_id'
+        error: "Missing call data or call_id",
       });
     }
 
     // Import database connection
-    const db = require('../db/connection');
-
+    const db = require("../db/connection");
     try {
       // Start a transaction to ensure data consistency
-      await db.query('BEGIN');
-
+      await db.query("BEGIN");
       // 1. Check if this call_id already exists (idempotency check)
       const existingCallResult = await db.query(
-        'SELECT call_id FROM calls WHERE call_id = $1',
-        [call.call_id]
+        "SELECT call_id FROM calls WHERE call_id = $1",
+        [call.call_id],
       );
 
       if (existingCallResult.rows.length > 0) {
-        await db.query('ROLLBACK');
-        logger.info('Call already processed', { call_id: call.call_id });
+        await db.query("ROLLBACK");
+        logger.info("Call already processed", { call_id: call.call_id });
         return res.json({
           success: true,
-          message: 'Call already processed',
-          call_id: call.call_id
+          message: "Call already processed",
+          call_id: call.call_id,
         });
       }
 
@@ -503,18 +572,18 @@ router.post('/call/update', async (req, res, next) => {
 
       // 3. Get current agent analytics
       const agentResult = await db.query(
-        'SELECT * FROM agents WHERE agent_id = $1',
-        [call.agent_id]
+        "SELECT * FROM agents WHERE agent_id = $1",
+        [call.agent_id],
       );
 
       // if (agentResult.rows.length === 0) {
       //   // If agent doesn't exist, create it with initial values
       //   const insertAgentQuery = `
       //     INSERT INTO agents (
-      //       agent_id, 
-      //       user_id, 
-      //       type, 
-      //       status, 
+      //       agent_id,
+      //       user_id,
+      //       type,
+      //       status,
       //       total_calls,
       //       disconnection_reason,
       //       average_latency,
@@ -585,8 +654,8 @@ router.post('/call/update', async (req, res, next) => {
 
       //   // Update the agent record
       //   const updateAgentQuery = `
-      //     UPDATE agents 
-      //     SET 
+      //     UPDATE agents
+      //     SET
       //       total_calls = $2,
       //       disconnection_reason = $3,
       //       average_latency = $4,
@@ -607,42 +676,40 @@ router.post('/call/update', async (req, res, next) => {
       // }
 
       // Commit the transaction
-      await db.query('COMMIT');
+      await db.query("COMMIT");
 
-      logger.info('Call analyzed event processed successfully', { 
+      logger.info("Call analyzed event processed successfully", {
         call_id: call.call_id,
         agent_id: call.agent_id,
         disconnection_reason: call.disconnection_reason,
         user_sentiment: call.call_analysis.user_sentiment,
-        call_successful: call.call_analysis.call_successful
+        call_successful: call.call_analysis.call_successful,
       });
 
       res.json({
         success: true,
-        message: 'Call analyzed event processed successfully',
+        message: "Call analyzed event processed successfully",
         call_id: call.call_id,
-        agent_id: call.agent_id
+        agent_id: call.agent_id,
       });
-
     } catch (dbError) {
-      await db.query('ROLLBACK');
-      logger.error('Database error processing call update', {
+      await db.query("ROLLBACK");
+      logger.error("Database error processing call update", {
         call_id: call.call_id,
         error: dbError.message,
-        stack: dbError.stack
+        stack: dbError.stack,
       });
 
       return res.status(500).json({
         success: false,
-        error: 'Failed to process call data',
-        details: dbError.message
+        error: "Failed to process call data",
+        details: dbError.message,
       });
     }
-
   } catch (error) {
-    logger.error('Call update endpoint error', { 
+    logger.error("Call update endpoint error", {
       error: error.message,
-      stack: error.stack 
+      stack: error.stack,
     });
     next(error);
   }
