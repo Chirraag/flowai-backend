@@ -223,8 +223,8 @@ class RedoxTransformer {
         let generatedId = null;
         if (response.location) {
           // Location format: https://fhir.redoxengine.com/fhir-sandbox/ResourceType/generated-id/_history/version
-          // We need to extract the ID that comes after the resource type (Patient, Appointment, etc.)
-          const locationMatch = response.location.match(/\/(Patient|Appointment)\/([^\/]+)/);
+          // We need to extract the ID that comes after the resource type (Patient, Appointment, DocumentReference, etc.)
+          const locationMatch = response.location.match(/\/(Patient|Appointment|DocumentReference)\/([^\/]+)/);
           if (locationMatch && locationMatch[2]) {
             generatedId = locationMatch[2];
           }
@@ -537,6 +537,73 @@ class RedoxTransformer {
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, patient]
+    };
+  }
+
+  static createDocumentReferenceBundle(patientId, documentContent, metadata = {}) {
+    const documentUuid = `urn:uuid:document-${uuidv4()}`;
+    
+    const messageHeader = this.createMessageHeader(
+      'https://fhir.redoxengine.com/EventDefinition/DocumentReferenceCreate',
+      documentUuid
+    );
+
+    const documentReference = {
+      fullUrl: documentUuid,
+      resource: {
+        resourceType: 'DocumentReference',
+        identifier: [{
+          system: 'urn:redox:flow-ai:document',
+          value: `DOC-${uuidv4()}`
+        }],
+        status: 'current',
+        type: {
+          coding: [{
+            system: 'http://loinc.org',
+            code: '11488-4',
+            display: 'Consult note'
+          }],
+          text: 'Patient Intake Details'
+        },
+        category: [{
+          coding: [{
+            system: 'http://loinc.org',
+            code: '34806-0',
+            display: 'Patient Intake'
+          }],
+          text: 'Patient Intake'
+        }],
+        subject: {
+          reference: `Patient/${patientId}`,
+          display: `Patient ${patientId}`
+        },
+        date: new Date().toISOString(),
+        author: [{
+          display: 'Retell AI Agent'
+        }],
+        content: [{
+          attachment: {
+            contentType: 'text/plain',
+            data: Buffer.from(documentContent).toString('base64'),
+            title: 'Patient Intake Details'
+          }
+        }],
+        context: {
+          related: metadata.callId ? [{
+            reference: `Encounter/call-${metadata.callId}`,
+            display: `Call ${metadata.callId}`
+          }] : []
+        },
+        description: 'Patient intake information collected during call'
+      }
+    };
+
+    return {
+      resourceType: 'Bundle',
+      id: `DocumentReferenceCreateBundle-${uuidv4()}`,
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      entry: [messageHeader, documentReference]
     };
   }
 

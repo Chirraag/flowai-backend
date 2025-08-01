@@ -7,6 +7,7 @@ const AuthService = require("../services/authService");
 const logger = require("../utils/logger");
 const db = require("../db/connection");
 const { Resend } = require("resend");
+const callIdStorage = require("../utils/callIdStorage");
 
 const authService = new AuthService();
 
@@ -542,18 +543,12 @@ router.post("/call/update", async (req, res, next) => {
       });
     }
 
-    // Import database connection
-    const db = require("../db/connection");
     try {
       // Start a transaction to ensure data consistency
       await db.query("BEGIN");
-      // 1. Check if this call_id already exists (idempotency check)
-      const existingCallResult = await db.query(
-        "SELECT call_id FROM calls WHERE call_id = $1",
-        [call.call_id],
-      );
-
-      if (existingCallResult.rows.length > 0) {
+      
+      // 1. Check if this call_id already exists using in-memory storage (idempotency check)
+      if (callIdStorage.hasBeenProcessed(call.call_id)) {
         await db.query("ROLLBACK");
         logger.info("Call already processed", { call_id: call.call_id });
         return res.json({
@@ -562,6 +557,9 @@ router.post("/call/update", async (req, res, next) => {
           call_id: call.call_id,
         });
       }
+
+      // Mark call as processed in memory
+      callIdStorage.markAsProcessed(call.call_id);
 
       // 2. Insert into calls table
       const insertCallQuery = `
@@ -675,6 +673,51 @@ router.post("/call/update", async (req, res, next) => {
       //   ]);
       // }
 
+      // 3. Check if patient intake details exist in custom_analysis_data
+      if (call.call_analysis?.custom_analysis_data?.patient_intake_details && call.retell_llm_dynamic_variables?.patient_id) {
+        const patientIntakeDetails = call.call_analysis.custom_analysis_data.patient_intake_details;
+        const patientId = call.retell_llm_dynamic_variables.patient_id;
+        
+        // Create DocumentReference
+        try {
+          const accessToken = call.retell_llm_dynamic_variables?.access_token || await authService.getAccessToken();
+          
+          const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
+            patientId,
+            patientIntakeDetails,
+            {
+              callId: call.call_id,
+              agentId: call.agent_id,
+              callTimestamp: new Date(call.start_timestamp).toISOString()
+            }
+          );
+          
+          const documentResponse = await RedoxAPIService.makeRequest(
+            'POST',
+            '/DocumentReference/$documentreference-create',
+            documentBundle,
+            null,
+            accessToken
+          );
+          
+          const documentResult = RedoxTransformer.transformAppointmentCreateResponse(documentResponse);
+          
+          logger.info('DocumentReference created for patient intake', {
+            call_id: call.call_id,
+            patient_id: patientId,
+            document_id: documentResult.generatedId,
+            success: documentResult.success
+          });
+        } catch (docError) {
+          logger.error('Error creating DocumentReference', {
+            call_id: call.call_id,
+            patient_id: patientId,
+            error: docError.message
+          });
+          // Continue processing even if document creation fails
+        }
+      }
+
       // Commit the transaction
       await db.query("COMMIT");
 
@@ -713,6 +756,38 @@ router.post("/call/update", async (req, res, next) => {
     });
     next(error);
   }
+});
+
+/**
+ * @swagger
+ * /api/v1/retell/call-storage/stats:
+ *   get:
+ *     summary: Get call ID storage statistics
+ *     tags: [Retell Call Storage]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Storage statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 processedCallIds:
+ *                   type: number
+ *                   description: Number of call IDs currently stored
+ *                 nextCleanup:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Next scheduled cleanup time (midnight PST)
+ */
+router.get('/call-storage/stats', authMiddleware, (req, res) => {
+  const stats = callIdStorage.getStats();
+  res.json({
+    success: true,
+    data: stats
+  });
 });
 
 module.exports = router;
