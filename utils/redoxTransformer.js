@@ -540,6 +540,72 @@ class RedoxTransformer {
     };
   }
 
+  static createDocumentReferenceSearchParams(patientId, startDate, endDate, category) {
+    const params = {
+      patient: `Patient/${patientId}`
+    };
+
+    if (startDate || endDate) {
+      if (startDate && endDate) {
+        params.date = `ge${startDate}&date=le${endDate}`;
+      } else if (startDate) {
+        params.date = `ge${startDate}`;
+      } else if (endDate) {
+        params.date = `le${endDate}`;
+      }
+    }
+
+    if (category) {
+      params.category = category;
+    }
+
+    return params;
+  }
+
+  static transformDocumentReferenceSearchResponse(redoxResponse) {
+    if (!redoxResponse || !redoxResponse.entry) {
+      return [];
+    }
+
+    return redoxResponse.entry.map(entry => {
+      const doc = entry.resource;
+      
+      // Extract patient ID from subject reference
+      let patientId = null;
+      if (doc.subject?.reference) {
+        const match = doc.subject.reference.match(/Patient\/(.+)/);
+        if (match) {
+          patientId = match[1];
+        }
+      }
+
+      // Extract document content
+      let documentContent = null;
+      if (doc.content && doc.content.length > 0 && doc.content[0].attachment?.data) {
+        try {
+          // Decode base64 content
+          documentContent = Buffer.from(doc.content[0].attachment.data, 'base64').toString('utf-8');
+        } catch (error) {
+          logger.error('Error decoding document content', { error: error.message });
+        }
+      }
+
+      return {
+        documentId: doc.id,
+        status: doc.status,
+        type: doc.type?.text || doc.type?.coding?.[0]?.display || 'Unknown',
+        category: doc.category?.[0]?.text || doc.category?.[0]?.coding?.[0]?.display || 'Unknown',
+        patientId: patientId,
+        date: doc.date,
+        author: doc.author?.[0]?.display || 'Unknown',
+        description: doc.description,
+        content: documentContent,
+        contentType: doc.content?.[0]?.attachment?.contentType || 'text/plain',
+        title: doc.content?.[0]?.attachment?.title || 'Untitled'
+      };
+    });
+  }
+
   static createDocumentReferenceBundle(patientId, documentContent, metadata = {}) {
     const documentUuid = `urn:uuid:document-${uuidv4()}`;
     

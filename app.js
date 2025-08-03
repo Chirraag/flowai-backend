@@ -15,6 +15,7 @@ const appointmentRoutes = require('./routes/appointment');
 const retellWebhookRoutes = require('./routes/retellWebhook');
 const redoxWebhookRoutes = require('./routes/redoxWebhook');
 const retellAgentRoutes = require('./routes/retellAgent');
+const documentReferenceRoutes = require('./routes/documentReference');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -123,6 +124,7 @@ app.use('/api/v1/appointment', appointmentRoutes);
 app.use('/api/v1/retell', retellWebhookRoutes);
 app.use('/api/v1/retell/agent', retellAgentRoutes);
 app.use('/api/v1/redox', redoxWebhookRoutes);
+app.use('/api/v1/document-reference', documentReferenceRoutes);
 
 // Error handling
 app.use(errorHandler);
