@@ -227,7 +227,7 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
       patientId: redoxPatientId
     });
     
-    await retellService.createPhoneCall(patientData.phone, dynamicVariables);
+    await retellService.createSchedulingCall(patientData.phone, dynamicVariables);
     
     logger.info('Outbound call triggered successfully', {
       patientId: redoxPatientId,

@@ -4,29 +4,73 @@ const logger = require('../utils/logger');
 class RetellService {
   constructor() {
     this.apiKey = process.env.RETELL_API_KEY;
+    this.baseUrl = 'https://api.retellai.com/v2';
+    
+    // Agent configurations
+    this.schedulingConfig = {
+      agentId: process.env.RETELL_SCHEDULING_AGENT_ID || process.env.RETELL_AGENT_ID,
+      fromNumber: process.env.RETELL_SCHEDULING_FROM_NUMBER || process.env.RETELL_FROM_NUMBER
+    };
+    
+    this.intakeConfig = {
+      agentId: process.env.RETELL_INTAKE_AGENT_ID,
+      fromNumber: process.env.RETELL_INTAKE_FROM_NUMBER
+    };
+    
+    // Legacy support
     this.fromNumber = process.env.RETELL_FROM_NUMBER;
     this.agentId = process.env.RETELL_AGENT_ID;
-    this.baseUrl = 'https://api.retellai.com/v2';
   }
 
   /**
-   * Create an outbound phone call via Retell API
+   * Create a scheduling call
+   * @param {string} toNumber - The phone number to call
+   * @param {object} dynamicVariables - Variables to pass to the call
+   * @returns {Promise<object>} - The call creation response
+   */
+  async createSchedulingCall(toNumber, dynamicVariables) {
+    return this._createCall(toNumber, dynamicVariables, this.schedulingConfig, 'scheduling');
+  }
+
+  /**
+   * Create an intake call
+   * @param {string} toNumber - The phone number to call
+   * @param {object} dynamicVariables - Variables to pass to the call
+   * @returns {Promise<object>} - The call creation response
+   */
+  async createIntakeCall(toNumber, dynamicVariables) {
+    return this._createCall(toNumber, dynamicVariables, this.intakeConfig, 'intake');
+  }
+
+  /**
+   * Create an outbound phone call via Retell API (legacy method)
    * @param {string} toNumber - The phone number to call
    * @param {object} dynamicVariables - Variables to pass to the call
    * @returns {Promise<object>} - The call creation response
    */
   async createPhoneCall(toNumber, dynamicVariables) {
+    return this._createCall(toNumber, dynamicVariables, {
+      agentId: this.agentId,
+      fromNumber: this.fromNumber
+    }, 'legacy');
+  }
+
+  /**
+   * Internal method to create calls with specific config
+   * @private
+   */
+  async _createCall(toNumber, dynamicVariables, config, callType) {
     try {
       if (!this.apiKey) {
         throw new Error('RETELL_API_KEY not configured');
       }
 
-      if (!this.fromNumber) {
-        throw new Error('RETELL_FROM_NUMBER not configured');
+      if (!config.fromNumber) {
+        throw new Error(`FROM_NUMBER not configured for ${callType} calls`);
       }
 
-      if (!this.agentId) {
-        throw new Error('RETELL_AGENT_ID not configured');
+      if (!config.agentId) {
+        throw new Error(`AGENT_ID not configured for ${callType} calls`);
       }
 
       // Ensure all dynamic variables are strings
@@ -36,15 +80,17 @@ class RetellService {
       }
 
       const payload = {
-        agent_id: this.agentId,
-        from_number: this.fromNumber,
+        agent_id: config.agentId,
+        from_number: config.fromNumber,
         to_number: toNumber,
         retell_llm_dynamic_variables: stringifiedVariables
       };
 
-      logger.info('Creating outbound call via Retell', {
+      logger.info(`Creating outbound ${callType} call via Retell`, {
         toNumber,
-        fromNumber: this.fromNumber,
+        fromNumber: config.fromNumber,
+        agentId: config.agentId,
+        callType,
         variableCount: Object.keys(stringifiedVariables).length
       });
 

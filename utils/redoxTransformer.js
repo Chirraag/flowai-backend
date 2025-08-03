@@ -653,12 +653,13 @@ class RedoxTransformer {
             title: 'Patient Intake Details'
           }
         }],
-        context: {
-          related: metadata.callId ? [{
-            reference: `Encounter/call-${metadata.callId}`,
-            display: `Call ${metadata.callId}`
-          }] : []
-        },
+        // Remove context.related as it references non-existent Encounter
+        // context: {
+        //   related: metadata.callId ? [{
+        //     reference: `Encounter/call-${metadata.callId}`,
+        //     display: `Call ${metadata.callId}`
+        //   }] : []
+        // },
         description: 'Patient intake information collected during call'
       }
     };

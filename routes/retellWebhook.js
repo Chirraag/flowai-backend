@@ -947,33 +947,24 @@ router.post('/trigger-intake-call', authMiddleware, async (req, res, next) => {
       appointment_description: appointment?.description || ''
     };
     
-    // Use the intake agent ID
-    const intakeAgentId = 'agent_ea9035eebe5e621d19ebe663f4';
-    const originalAgentId = process.env.RETELL_AGENT_ID;
-    process.env.RETELL_AGENT_ID = intakeAgentId;
+    // Use the new intake-specific method
+    const callResponse = await retellService.createIntakeCall(patientData.phone, dynamicVariables);
     
-    try {
-      const callResponse = await retellService.createPhoneCall(patientData.phone, dynamicVariables);
-      
-      logger.info('Intake call created successfully', {
+    logger.info('Intake call created successfully', {
+      callId: callResponse.call_id,
+      status: callResponse.status,
+      patientId: patientId
+    });
+    
+    res.json({
+      success: true,
+      data: {
         callId: callResponse.call_id,
         status: callResponse.status,
+        message: 'Intake call triggered successfully',
         patientId: patientId
-      });
-      
-      res.json({
-        success: true,
-        data: {
-          callId: callResponse.call_id,
-          status: callResponse.status,
-          message: 'Intake call triggered successfully',
-          patientId: patientId
-        }
-      });
-    } finally {
-      // Restore original agent ID
-      process.env.RETELL_AGENT_ID = originalAgentId;
-    }
+      }
+    });
     
   } catch (error) {
     logger.error('Error triggering intake call', {
