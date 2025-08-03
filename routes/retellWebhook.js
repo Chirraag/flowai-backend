@@ -678,13 +678,26 @@ router.post("/call/update", async (req, res, next) => {
         const patientIntakeDetails = call.call_analysis.custom_analysis_data.patient_intake_details;
         const patientId = call.retell_llm_dynamic_variables.patient_id;
         
-        // Create DocumentReference
-        try {
-          const accessToken = call.retell_llm_dynamic_variables?.access_token || await authService.getAccessToken();
+        // Skip if intake details is empty or just whitespace
+        if (!patientIntakeDetails || typeof patientIntakeDetails !== 'string' || !patientIntakeDetails.trim()) {
+          logger.info('Skipping DocumentReference creation - patient intake details is empty', {
+            call_id: call.call_id,
+            patient_id: patientId
+          });
+        } else {
+          // Create DocumentReference
+          try {
+            const accessToken = call.retell_llm_dynamic_variables?.access_token || await authService.getAccessToken();
+            
+            // Ensure the text has proper formatting (normalize newlines)
+            const formattedIntakeDetails = patientIntakeDetails
+              .replace(/\r\n/g, '\n')  // Convert Windows newlines
+              .replace(/\r/g, '\n')    // Convert old Mac newlines
+              .trim();                 // Remove leading/trailing whitespace
           
           const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
             patientId,
-            patientIntakeDetails,
+            formattedIntakeDetails,
             {
               callId: call.call_id,
               agentId: call.agent_id,
@@ -714,7 +727,8 @@ router.post("/call/update", async (req, res, next) => {
             patient_id: patientId,
             error: docError.message
           });
-          // Continue processing even if document creation fails
+            // Continue processing even if document creation fails
+          }
         }
       }
 

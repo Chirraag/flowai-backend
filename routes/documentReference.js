@@ -7,42 +7,23 @@ const logger = require('../utils/logger');
 
 /**
  * @swagger
- * /api/v1/document-reference/search:
- *   post:
- *     summary: Search for DocumentReferences
+ * /api/v1/document-reference/patient/{patientId}:
+ *   get:
+ *     summary: Get all DocumentReferences for a patient
  *     tags: [DocumentReference]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - patientId
- *             properties:
- *               patientId:
- *                 type: string
- *                 description: Patient ID to search documents for
- *                 example: "patient-123"
- *               startDate:
- *                 type: string
- *                 format: date
- *                 description: Start date for document search (inclusive)
- *                 example: "2024-01-01"
- *               endDate:
- *                 type: string
- *                 format: date
- *                 description: End date for document search (inclusive)
- *                 example: "2024-12-31"
- *               category:
- *                 type: string
- *                 description: Document category to filter by
- *                 example: "Patient Intake"
+ *     parameters:
+ *       - in: path
+ *         name: patientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The patient ID to get documents for
+ *         example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *     responses:
  *       200:
- *         description: List of DocumentReferences
+ *         description: List of all patient's documents
  *         content:
  *           application/json:
  *             schema:
@@ -82,30 +63,15 @@ const logger = require('../utils/logger');
  *       500:
  *         description: Internal server error
  */
-router.post('/search', authMiddleware, async (req, res, next) => {
+router.get('/patient/:patientId', authMiddleware, async (req, res, next) => {
   try {
-    const { patientId, startDate, endDate, category } = req.body;
+    const { patientId } = req.params;
     
-    logger.info('DocumentReference search request', {
-      patientId,
-      startDate,
-      endDate,
-      category
-    });
+    logger.info('DocumentReference search by patient', { patientId });
     
-    if (!patientId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required field: patientId'
-      });
-    }
-
-    const searchParams = RedoxTransformer.createDocumentReferenceSearchParams(
-      patientId,
-      startDate,
-      endDate,
-      category
-    );
+    const searchParams = {
+      patient: `Patient/${patientId}`
+    };
     
     const response = await RedoxAPIService.makeRequest(
       'POST',
@@ -232,6 +198,101 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       });
     }
     
+    next(error);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/document-reference/create:
+ *   post:
+ *     summary: Create a DocumentReference (for testing)
+ *     tags: [DocumentReference]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - patientId
+ *               - content
+ *             properties:
+ *               patientId:
+ *                 type: string
+ *                 description: Patient ID
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
+ *               content:
+ *                 type: string
+ *                 description: Document content
+ *                 example: "Patient reports feeling well. No complaints today."
+ *               title:
+ *                 type: string
+ *                 description: Document title
+ *                 example: "Clinical Note"
+ *     responses:
+ *       201:
+ *         description: DocumentReference created successfully
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/create', authMiddleware, async (req, res, next) => {
+  try {
+    const { patientId, content, title } = req.body;
+    
+    logger.info('DocumentReference create request', { patientId, title });
+    
+    if (!patientId || !content) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: patientId, content'
+      });
+    }
+
+    // Ensure the text has proper formatting (normalize newlines)
+    const formattedContent = content
+      .replace(/\r\n/g, '\n')  // Convert Windows newlines
+      .replace(/\r/g, '\n')    // Convert old Mac newlines
+      .trim();                 // Remove leading/trailing whitespace
+    
+    const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
+      patientId,
+      formattedContent,
+      {
+        title: title || 'Manual Test Document',
+        source: 'API Test'
+      }
+    );
+    
+    const response = await RedoxAPIService.makeRequest(
+      'POST',
+      '/DocumentReference/$documentreference-create',
+      documentBundle,
+      null,
+      req.accessToken
+    );
+
+    const result = RedoxTransformer.transformAppointmentCreateResponse(response);
+    
+    logger.info('DocumentReference created', { 
+      patientId,
+      documentId: result.generatedId,
+      success: result.success
+    });
+    
+    res.status(result.success ? 201 : 400).json({
+      success: result.success,
+      data: result.success ? {
+        documentId: result.generatedId,
+        message: 'DocumentReference created successfully'
+      } : { error: result.error }
+    });
+  } catch (error) {
+    logger.error('DocumentReference create error', { error: error.message });
     next(error);
   }
 });

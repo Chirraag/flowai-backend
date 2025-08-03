@@ -626,18 +626,18 @@ class RedoxTransformer {
         type: {
           coding: [{
             system: 'http://loinc.org',
-            code: '11488-4',
-            display: 'Consult note'
+            code: '34117-2',
+            display: 'History and physical note'
           }],
-          text: 'Patient Intake Details'
+          text: 'History and Physical'
         },
         category: [{
           coding: [{
-            system: 'http://loinc.org',
-            code: '34806-0',
-            display: 'Patient Intake'
+            system: 'http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category',
+            code: 'clinical-note',
+            display: 'Clinical Note'
           }],
-          text: 'Patient Intake'
+          text: 'Clinical Note'
         }],
         subject: {
           reference: `Patient/${patientId}`,
