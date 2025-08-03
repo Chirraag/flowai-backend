@@ -311,7 +311,6 @@ class RedoxTransformer {
 
     return {
       resourceType: 'Bundle',
-      id: `AppointmentUpdateBundle-${(appointmentType || 'default').replace(/[^a-zA-Z0-9-]/g, '-')}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, appointment]
@@ -533,7 +532,6 @@ class RedoxTransformer {
 
     return {
       resourceType: 'Bundle',
-      id: `PatientCreateBundle-${uuidv4()}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, patient]
@@ -645,7 +643,7 @@ class RedoxTransformer {
         },
         date: new Date().toISOString(),
         author: [{
-          display: 'Retell AI Agent'
+          display: 'Flow AI System'
         }],
         content: [{
           attachment: {
@@ -666,7 +664,6 @@ class RedoxTransformer {
 
     return {
       resourceType: 'Bundle',
-      id: `DocumentReferenceCreateBundle-${uuidv4()}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, documentReference]
@@ -798,7 +795,6 @@ class RedoxTransformer {
 
     return {
       resourceType: 'Bundle',
-      id: `AppointmentCreateBundle-${(appointmentType || 'default').replace(/[^a-zA-Z0-9-]/g, '-')}`,
       type: 'message',
       timestamp: new Date().toISOString(),
       entry: [messageHeader, appointment]

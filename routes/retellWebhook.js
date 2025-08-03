@@ -774,6 +774,193 @@ router.post("/call/update", async (req, res, next) => {
 
 /**
  * @swagger
+ * /api/v1/retell/trigger-intake-call:
+ *   post:
+ *     summary: Trigger an intake call for a patient
+ *     tags: [Retell Outbound Calls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - patientId
+ *             properties:
+ *               patientId:
+ *                 type: string
+ *                 description: Redox patient ID
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
+ *     responses:
+ *       200:
+ *         description: Call triggered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     callId:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     message:
+ *                       type: string
+ *                     patientId:
+ *                       type: string
+ *       400:
+ *         description: Bad request - missing patient ID
+ *       404:
+ *         description: Patient not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/trigger-intake-call', authMiddleware, async (req, res, next) => {
+  try {
+    const retellService = require('../services/retellService');
+    const { patientId } = req.body;
+    
+    if (!patientId) {
+      logger.warn('Trigger intake call failed: missing patientId');
+      return res.status(400).json({
+        success: false,
+        error: 'Patient ID is required'
+      });
+    }
+    
+    logger.info('Triggering intake call', { patientId });
+    
+    // Get access token
+    const accessToken = await authService.getAccessToken();
+    
+    // Get patient details from Redox
+    logger.info('Fetching patient details from Redox', { patientId });
+    
+    const patientResponse = await RedoxAPIService.makeRequest(
+      'GET',
+      `/Patient/${patientId}`,
+      null,
+      null,
+      accessToken
+    );
+    
+    if (!patientResponse || !patientResponse.id) {
+      logger.error('Patient not found in Redox', { patientId });
+      return res.status(404).json({
+        success: false,
+        error: 'Patient not found'
+      });
+    }
+    
+    // Transform patient data
+    const patientData = RedoxTransformer.transformPatientSearchResponse({
+      entry: [{ resource: patientResponse }]
+    })[0];
+    
+    if (!patientData.phone) {
+      logger.error('Cannot trigger intake call - no phone number found', {
+        patientId,
+        patientName: patientData.fullName
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Patient phone number is required for outbound call'
+      });
+    }
+    
+    // Search for appointments
+    let appointments = [];
+    try {
+      const appointmentSearchParams = RedoxTransformer.createAppointmentSearchParams(patientId);
+      const appointmentResponse = await RedoxAPIService.makeRequest(
+        'POST',
+        '/Appointment/_search',
+        null,
+        appointmentSearchParams,
+        accessToken
+      );
+      appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
+    } catch (appointmentError) {
+      logger.warn('Failed to fetch appointments for intake call', {
+        error: appointmentError.message,
+        patientId
+      });
+    }
+    
+    // Get the most recent appointment
+    const appointment = appointments.length > 0 ? appointments[0] : null;
+    
+    // Prepare dynamic variables for the intake agent
+    const dynamicVariables = {
+      // Call context
+      call_type: 'intake',
+      access_token: accessToken,
+      
+      // Patient details
+      patient_id: patientId,
+      patient_name: patientData.fullName || '',
+      patient_phone: patientData.phone || '',
+      patient_email: patientData.email || '',
+      patient_dob: patientData.dateOfBirth || '',
+      patient_zip: patientData.zipCode || '',
+      patient_address: patientData.address || '',
+      insurance_name: patientData.insuranceName || '',
+      insurance_type: patientData.insuranceType || '',
+      insurance_member_id: patientData.insuranceMemberId || '',
+      
+      // Appointment details if available
+      appointment_id: appointment?.appointmentId || '',
+      appointment_type: appointment?.appointmentType || '',
+      appointment_start: appointment?.startTime || '',
+      appointment_status: appointment?.status || '',
+      appointment_description: appointment?.description || ''
+    };
+    
+    // Use the intake agent ID
+    const intakeAgentId = 'agent_ea9035eebe5e621d19ebe663f4';
+    const originalAgentId = process.env.RETELL_AGENT_ID;
+    process.env.RETELL_AGENT_ID = intakeAgentId;
+    
+    try {
+      const callResponse = await retellService.createPhoneCall(patientData.phone, dynamicVariables);
+      
+      logger.info('Intake call created successfully', {
+        callId: callResponse.call_id,
+        status: callResponse.status,
+        patientId: patientId
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          callId: callResponse.call_id,
+          status: callResponse.status,
+          message: 'Intake call triggered successfully',
+          patientId: patientId
+        }
+      });
+    } finally {
+      // Restore original agent ID
+      process.env.RETELL_AGENT_ID = originalAgentId;
+    }
+    
+  } catch (error) {
+    logger.error('Error triggering intake call', {
+      error: error.message,
+      patientId: req.body?.patientId
+    });
+    next(error);
+  }
+});
+
+/**
+ * @swagger
  * /api/v1/retell/call-storage/stats:
  *   get:
  *     summary: Get call ID storage statistics

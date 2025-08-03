@@ -7,20 +7,25 @@ const logger = require('../utils/logger');
 
 /**
  * @swagger
- * /api/v1/document-reference/patient/{patientId}:
- *   get:
- *     summary: Get all DocumentReferences for a patient
+ * /api/v1/document-reference/search:
+ *   post:
+ *     summary: Search DocumentReferences for a patient
  *     tags: [DocumentReference]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: patientId
- *         required: true
- *         schema:
- *           type: string
- *         description: The patient ID to get documents for
- *         example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - patientId
+ *             properties:
+ *               patientId:
+ *                 type: string
+ *                 description: The patient ID to get documents for
+ *                 example: "65bee8d7-fee9-4e60-b9d6-1ae276b075b4"
  *     responses:
  *       200:
  *         description: List of all patient's documents
@@ -63,11 +68,18 @@ const logger = require('../utils/logger');
  *       500:
  *         description: Internal server error
  */
-router.get('/patient/:patientId', authMiddleware, async (req, res, next) => {
+router.post('/search', authMiddleware, async (req, res, next) => {
   try {
-    const { patientId } = req.params;
+    const { patientId } = req.body;
     
     logger.info('DocumentReference search by patient', { patientId });
+    
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: patientId'
+      });
+    }
     
     const searchParams = {
       patient: `Patient/${patientId}`
@@ -98,109 +110,6 @@ router.get('/patient/:patientId', authMiddleware, async (req, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /api/v1/document-reference/{id}:
- *   get:
- *     summary: Get a specific DocumentReference by ID
- *     tags: [DocumentReference]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: The DocumentReference ID
- *     responses:
- *       200:
- *         description: DocumentReference details
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     documentId:
- *                       type: string
- *                     status:
- *                       type: string
- *                     type:
- *                       type: string
- *                     category:
- *                       type: string
- *                     patientId:
- *                       type: string
- *                     date:
- *                       type: string
- *                     author:
- *                       type: string
- *                     description:
- *                       type: string
- *                     content:
- *                       type: string
- *                     contentType:
- *                       type: string
- *                     title:
- *                       type: string
- *       404:
- *         description: DocumentReference not found
- *       500:
- *         description: Internal server error
- */
-router.get('/:id', authMiddleware, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    
-    logger.info('DocumentReference read request', { documentId: id });
-    
-    const response = await RedoxAPIService.makeRequest(
-      'GET',
-      `/DocumentReference/${id}`,
-      null,
-      null,
-      req.accessToken
-    );
-
-    if (!response || response.resourceType !== 'DocumentReference') {
-      return res.status(404).json({
-        success: false,
-        error: 'DocumentReference not found'
-      });
-    }
-
-    // Transform single document response
-    const documents = RedoxTransformer.transformDocumentReferenceSearchResponse({
-      entry: [{ resource: response }]
-    });
-    
-    logger.info('DocumentReference read completed', { documentId: id });
-    
-    res.json({
-      success: true,
-      data: documents[0] || null
-    });
-  } catch (error) {
-    logger.error('DocumentReference read error', { 
-      documentId: req.params.id,
-      error: error.message 
-    });
-    
-    if (error.response?.status === 404) {
-      return res.status(404).json({
-        success: false,
-        error: 'DocumentReference not found'
-      });
-    }
-    
-    next(error);
-  }
-});
 
 /**
  * @swagger
@@ -292,7 +201,21 @@ router.post('/create', authMiddleware, async (req, res, next) => {
       } : { error: result.error }
     });
   } catch (error) {
-    logger.error('DocumentReference create error', { error: error.message });
+    logger.error('DocumentReference create error', { 
+      error: error.message,
+      patientId: patientId,
+      bundleStructure: JSON.stringify(documentBundle, null, 2)
+    });
+    
+    // Check if it's a Redox validation error
+    if (error.message.includes('400')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request format. Please check patient ID and content.',
+        details: error.message
+      });
+    }
+    
     next(error);
   }
 });
