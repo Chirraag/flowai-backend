@@ -3,11 +3,12 @@ const REDOX_CONFIG = require('../config/redox');
 
 class RedoxTransformer {
   static createMessageHeader(eventUri, focusReference) {
+    const messageId = uuidv4();
     return {
-      fullUrl: `urn:uuid:messageheader-${uuidv4()}`,
+      fullUrl: `urn:uuid:${messageId}`,
       resource: {
         resourceType: 'MessageHeader',
-        id: `MessageHeader-${uuidv4()}`,
+        id: messageId,
         eventUri,
         source: {
           name: REDOX_CONFIG.sourceApp,

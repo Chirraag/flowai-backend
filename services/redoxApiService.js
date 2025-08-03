@@ -101,6 +101,7 @@ class RedoxAPIService {
         statusText: error.response?.statusText,
         error: error.response?.data?.message || error.message,
         errorData: error.response?.data,
+        errorIssues: error.response?.data?.issue ? JSON.stringify(error.response.data.issue, null, 2) : null,
         requestUrl: config.url,
         timestamp: new Date().toISOString()
       });

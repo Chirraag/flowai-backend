@@ -168,6 +168,20 @@ router.post('/create', authMiddleware, async (req, res, next) => {
       .replace(/\r/g, '\n')    // Convert old Mac newlines
       .trim();                 // Remove leading/trailing whitespace
     
+    // Log details for comparison with Retell flow
+    logger.info('=== SWAGGER DOCUMENT CREATION DEBUG ===', {
+      patient_id: patientId,
+      content_type: typeof formattedContent,
+      content_length: formattedContent.length,
+      content_preview: formattedContent.substring(0, 100),
+      has_access_token: !!req.accessToken,
+      access_token_source: 'auth_middleware',
+      metadata: {
+        title: title || 'Manual Test Document',
+        source: 'API Test'
+      }
+    });
+    
     const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
       patientId,
       formattedContent,
@@ -176,6 +190,15 @@ router.post('/create', authMiddleware, async (req, res, next) => {
         source: 'API Test'
       }
     );
+    
+    logger.info('=== SWAGGER BUNDLE STRUCTURE ===', {
+      patient_id: patientId,
+      bundle_type: documentBundle.resourceType,
+      bundle_entries: documentBundle.entry?.length,
+      message_header_id: documentBundle.entry?.[0]?.resource?.id,
+      document_id: documentBundle.entry?.[1]?.resource?.id,
+      bundle_json: JSON.stringify(documentBundle, null, 2)
+    });
     
     const response = await RedoxAPIService.makeRequest(
       'POST',
@@ -204,7 +227,8 @@ router.post('/create', authMiddleware, async (req, res, next) => {
     logger.error('DocumentReference create error', { 
       error: error.message,
       patientId: patientId,
-      bundleStructure: JSON.stringify(documentBundle, null, 2)
+      bundleStructure: JSON.stringify(documentBundle, null, 2),
+      bundleSize: JSON.stringify(documentBundle).length
     });
     
     // Check if it's a Redox validation error

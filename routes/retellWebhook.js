@@ -694,16 +694,41 @@ router.post("/call/update", async (req, res, next) => {
               .replace(/\r\n/g, '\n')  // Convert Windows newlines
               .replace(/\r/g, '\n')    // Convert old Mac newlines
               .trim();                 // Remove leading/trailing whitespace
-          
-          const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
-            patientId,
-            formattedIntakeDetails,
-            {
-              callId: call.call_id,
-              agentId: call.agent_id,
-              callTimestamp: new Date(call.start_timestamp).toISOString()
-            }
-          );
+            
+            // Log details for comparison with Swagger flow
+            logger.info('=== RETELL DOCUMENT CREATION DEBUG ===', {
+              call_id: call.call_id,
+              patient_id: patientId,
+              content_type: typeof formattedIntakeDetails,
+              content_length: formattedIntakeDetails.length,
+              content_preview: formattedIntakeDetails.substring(0, 100),
+              has_access_token: !!accessToken,
+              access_token_source: call.retell_llm_dynamic_variables?.access_token ? 'retell_variables' : 'auth_service',
+              metadata: {
+                callId: call.call_id,
+                agentId: call.agent_id,
+                callTimestamp: new Date(call.start_timestamp).toISOString()
+              }
+            });
+            
+            const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
+              patientId,
+              formattedIntakeDetails,
+              {
+                callId: call.call_id,
+                agentId: call.agent_id,
+                callTimestamp: new Date(call.start_timestamp).toISOString()
+              }
+            );
+            
+            logger.info('=== RETELL BUNDLE STRUCTURE ===', {
+              call_id: call.call_id,
+              bundle_type: documentBundle.resourceType,
+              bundle_entries: documentBundle.entry?.length,
+              message_header_id: documentBundle.entry?.[0]?.resource?.id,
+              document_id: documentBundle.entry?.[1]?.resource?.id,
+              bundle_json: JSON.stringify(documentBundle, null, 2)
+            });
           
           const documentResponse = await RedoxAPIService.makeRequest(
             'POST',
