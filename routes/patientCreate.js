@@ -76,6 +76,10 @@ const logger = require('../utils/logger');
  *                 type: string
  *                 description: Insurance provider name
  *                 example: "Blue Cross"
+ *               insuranceMemberId:
+ *                 type: string
+ *                 description: Insurance member ID
+ *                 example: "INS123456789"
  *               medicalRecordNumber:
  *                 type: string
  *                 description: Medical record number
@@ -108,6 +112,7 @@ router.post('/update', authMiddleware, async (req, res, next) => {
       zipCode, 
       country, 
       insuranceName, 
+      insuranceMemberId,
       medicalRecordNumber 
     } = req.body;
     
@@ -141,6 +146,7 @@ router.post('/update', authMiddleware, async (req, res, next) => {
       zipCode,
       country,
       insuranceName,
+      insuranceMemberId,
       medicalRecordNumber
     };
 
@@ -245,6 +251,10 @@ router.post('/update', authMiddleware, async (req, res, next) => {
  *                 type: string
  *                 description: Insurance provider name
  *                 example: "Blue Cross"
+ *               insuranceMemberId:
+ *                 type: string
+ *                 description: Insurance member ID
+ *                 example: "INS123456789"
  *               medicalRecordNumber:
  *                 type: string
  *                 description: Medical record number
@@ -274,6 +284,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
       zipCode, 
       country, 
       insuranceName, 
+      insuranceMemberId,
       medicalRecordNumber 
     } = req.body;
     
@@ -307,6 +318,7 @@ router.post('/create', authMiddleware, async (req, res, next) => {
       zipCode,
       country,
       insuranceName,
+      insuranceMemberId,
       medicalRecordNumber
     };
 
