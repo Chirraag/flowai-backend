@@ -546,7 +546,7 @@ router.post("/call/update", async (req, res, next) => {
     try {
       // Start a transaction to ensure data consistency
       await db.query("BEGIN");
-      
+
       // 1. Check if this call_id already exists using in-memory storage (idempotency check)
       if (callIdStorage.hasBeenProcessed(call.call_id)) {
         await db.query("ROLLBACK");
@@ -674,84 +674,104 @@ router.post("/call/update", async (req, res, next) => {
       // }
 
       // 3. Check if patient intake details exist in custom_analysis_data
-      if (call.call_analysis?.custom_analysis_data?.patient_intake_details && call.retell_llm_dynamic_variables?.patient_id) {
-        const patientIntakeDetails = call.call_analysis.custom_analysis_data.patient_intake_details;
+      if (
+        call.call_analysis?.custom_analysis_data?.patient_intake_details &&
+        call.retell_llm_dynamic_variables?.patient_id
+      ) {
+        const patientIntakeDetails =
+          call.call_analysis.custom_analysis_data.patient_intake_details;
         const patientId = call.retell_llm_dynamic_variables.patient_id;
-        
+
         // Skip if intake details is empty or just whitespace
-        if (!patientIntakeDetails || typeof patientIntakeDetails !== 'string' || !patientIntakeDetails.trim()) {
-          logger.info('Skipping DocumentReference creation - patient intake details is empty', {
-            call_id: call.call_id,
-            patient_id: patientId
-          });
+        if (
+          !patientIntakeDetails ||
+          typeof patientIntakeDetails !== "string" ||
+          !patientIntakeDetails.trim()
+        ) {
+          logger.info(
+            "Skipping DocumentReference creation - patient intake details is empty",
+            {
+              call_id: call.call_id,
+              patient_id: patientId,
+            },
+          );
         } else {
           // Create DocumentReference
           try {
-            const accessToken = call.retell_llm_dynamic_variables?.access_token || await authService.getAccessToken();
-            
+            const accessToken =
+              call.retell_llm_dynamic_variables?.access_token ||
+              (await authService.getAccessToken());
+
             // Ensure the text has proper formatting (normalize newlines)
             const formattedIntakeDetails = patientIntakeDetails
-              .replace(/\r\n/g, '\n')  // Convert Windows newlines
-              .replace(/\r/g, '\n')    // Convert old Mac newlines
-              .trim();                 // Remove leading/trailing whitespace
-            
+              .replace(/\r\n/g, "\n") // Convert Windows newlines
+              .replace(/\r/g, "\n") // Convert old Mac newlines
+              .trim(); // Remove leading/trailing whitespace
+
             // Log details for comparison with Swagger flow
-            logger.info('=== RETELL DOCUMENT CREATION DEBUG ===', {
+            logger.info("=== RETELL DOCUMENT CREATION DEBUG ===", {
               call_id: call.call_id,
               patient_id: patientId,
               content_type: typeof formattedIntakeDetails,
               content_length: formattedIntakeDetails.length,
               content_preview: formattedIntakeDetails.substring(0, 100),
               has_access_token: !!accessToken,
-              access_token_source: call.retell_llm_dynamic_variables?.access_token ? 'retell_variables' : 'auth_service',
+              access_token_source: call.retell_llm_dynamic_variables
+                ?.access_token
+                ? "retell_variables"
+                : "auth_service",
               metadata: {
                 callId: call.call_id,
                 agentId: call.agent_id,
-                callTimestamp: new Date(call.start_timestamp).toISOString()
-              }
+                callTimestamp: new Date(call.start_timestamp).toISOString(),
+              },
             });
-            
-            const documentBundle = RedoxTransformer.createDocumentReferenceBundle(
-              patientId,
-              formattedIntakeDetails,
-              {
-                callId: call.call_id,
-                agentId: call.agent_id,
-                callTimestamp: new Date(call.start_timestamp).toISOString()
-              }
-            );
-            
-            logger.info('=== RETELL BUNDLE STRUCTURE ===', {
+
+            const documentBundle =
+              RedoxTransformer.createDocumentReferenceBundle(
+                patientId,
+                formattedIntakeDetails,
+                {
+                  callId: call.call_id,
+                  agentId: call.agent_id,
+                  callTimestamp: new Date(call.start_timestamp).toISOString(),
+                },
+              );
+
+            logger.info("=== RETELL BUNDLE STRUCTURE ===", {
               call_id: call.call_id,
               bundle_type: documentBundle.resourceType,
               bundle_entries: documentBundle.entry?.length,
               message_header_id: documentBundle.entry?.[0]?.resource?.id,
               document_id: documentBundle.entry?.[1]?.resource?.id,
-              bundle_json: JSON.stringify(documentBundle, null, 2)
+              bundle_json: JSON.stringify(documentBundle, null, 2),
             });
-          
-          const documentResponse = await RedoxAPIService.makeRequest(
-            'POST',
-            '/DocumentReference/$documentreference-create',
-            documentBundle,
-            null,
-            accessToken
-          );
-          
-          const documentResult = RedoxTransformer.transformAppointmentCreateResponse(documentResponse);
-          
-          logger.info('DocumentReference created for patient intake', {
-            call_id: call.call_id,
-            patient_id: patientId,
-            document_id: documentResult.generatedId,
-            success: documentResult.success
-          });
-        } catch (docError) {
-          logger.error('Error creating DocumentReference', {
-            call_id: call.call_id,
-            patient_id: patientId,
-            error: docError.message
-          });
+
+            const documentResponse = await RedoxAPIService.makeRequest(
+              "POST",
+              "/DocumentReference/$documentreference-create",
+              documentBundle,
+              null,
+              accessToken,
+            );
+
+            const documentResult =
+              RedoxTransformer.transformAppointmentCreateResponse(
+                documentResponse,
+              );
+
+            logger.info("DocumentReference created for patient intake", {
+              call_id: call.call_id,
+              patient_id: patientId,
+              document_id: documentResult.generatedId,
+              success: documentResult.success,
+            });
+          } catch (docError) {
+            logger.error("Error creating DocumentReference", {
+              call_id: call.call_id,
+              patient_id: patientId,
+              error: docError.message,
+            });
             // Continue processing even if document creation fails
           }
         }
@@ -846,130 +866,136 @@ router.post("/call/update", async (req, res, next) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/trigger-intake-call', authMiddleware, async (req, res, next) => {
+router.post("/trigger-intake-call", authMiddleware, async (req, res, next) => {
   try {
-    const retellService = require('../services/retellService');
+    const retellService = require("../services/retellService");
     const { patientId } = req.body;
-    
+
     if (!patientId) {
-      logger.warn('Trigger intake call failed: missing patientId');
+      logger.warn("Trigger intake call failed: missing patientId");
       return res.status(400).json({
         success: false,
-        error: 'Patient ID is required'
+        error: "Patient ID is required",
       });
     }
-    
-    logger.info('Triggering intake call', { patientId });
-    
+
+    logger.info("Triggering intake call", { patientId });
+
     // Get access token
     const accessToken = await authService.getAccessToken();
-    
+
     // Get patient details from Redox
-    logger.info('Fetching patient details from Redox', { patientId });
-    
+    logger.info("Fetching patient details from Redox", { patientId });
+
     const patientResponse = await RedoxAPIService.makeRequest(
-      'GET',
+      "GET",
       `/Patient/${patientId}`,
       null,
       null,
-      accessToken
+      accessToken,
     );
-    
+
     if (!patientResponse || !patientResponse.id) {
-      logger.error('Patient not found in Redox', { patientId });
+      logger.error("Patient not found in Redox", { patientId });
       return res.status(404).json({
         success: false,
-        error: 'Patient not found'
+        error: "Patient not found",
       });
     }
-    
+
     // Transform patient data
     const patientData = RedoxTransformer.transformPatientSearchResponse({
-      entry: [{ resource: patientResponse }]
+      entry: [{ resource: patientResponse }],
     })[0];
-    
+
     if (!patientData.phone) {
-      logger.error('Cannot trigger intake call - no phone number found', {
+      logger.error("Cannot trigger intake call - no phone number found", {
         patientId,
-        patientName: patientData.fullName
+        patientName: patientData.fullName,
       });
       return res.status(400).json({
         success: false,
-        error: 'Patient phone number is required for outbound call'
+        error: "Patient phone number is required for outbound call",
       });
     }
-    
+
     // Search for appointments
     let appointments = [];
     try {
-      const appointmentSearchParams = RedoxTransformer.createAppointmentSearchParams(patientId);
+      const appointmentSearchParams =
+        RedoxTransformer.createAppointmentSearchParams(patientId);
       const appointmentResponse = await RedoxAPIService.makeRequest(
-        'POST',
-        '/Appointment/_search',
+        "POST",
+        "/Appointment/_search",
         null,
         appointmentSearchParams,
-        accessToken
+        accessToken,
       );
-      appointments = RedoxTransformer.transformAppointmentSearchResponse(appointmentResponse);
+      appointments =
+        RedoxTransformer.transformAppointmentSearchResponse(
+          appointmentResponse,
+        );
     } catch (appointmentError) {
-      logger.warn('Failed to fetch appointments for intake call', {
+      logger.warn("Failed to fetch appointments for intake call", {
         error: appointmentError.message,
-        patientId
+        patientId,
       });
     }
-    
+
     // Get the most recent appointment
     const appointment = appointments.length > 0 ? appointments[0] : null;
-    
+
     // Prepare dynamic variables for the intake agent
     const dynamicVariables = {
       // Call context
-      call_type: 'intake',
+      call_type: "intake",
       access_token: accessToken,
-      
+
       // Patient details
       patient_id: patientId,
-      patient_name: patientData.fullName || '',
-      patient_phone: patientData.phone || '',
-      patient_email: patientData.email || '',
-      patient_dob: patientData.dateOfBirth || '',
-      patient_zip: patientData.zipCode || '',
-      patient_address: patientData.address || '',
-      insurance_name: patientData.insuranceName || '',
-      insurance_type: patientData.insuranceType || '',
-      insurance_member_id: patientData.insuranceMemberId || '',
-      
+      patient_name: patientData.fullName || "",
+      patient_phone: patientData.phone || "",
+      patient_email: patientData.email || "",
+      patient_dob: patientData.dateOfBirth || "",
+      patient_zip: patientData.zipCode || "",
+      patient_address: patientData.address || "",
+      insurance_name: patientData.insuranceName || "",
+      insurance_type: patientData.insuranceType || "",
+      insurance_member_id: patientData.insuranceMemberId || "",
+
       // Appointment details if available
-      appointment_id: appointment?.appointmentId || '',
-      appointment_type: appointment?.appointmentType || '',
-      appointment_start: appointment?.startTime || '',
-      appointment_status: appointment?.status || '',
-      appointment_description: appointment?.description || ''
+      appointment_id: appointment?.appointmentId || "",
+      appointment_type: appointment?.appointmentType || "",
+      appointment_start: appointment?.startTime || "",
+      appointment_status: appointment?.status || "",
+      appointment_description: appointment?.description || "",
     };
-    
+
     // Use the new intake-specific method
-    const callResponse = await retellService.createIntakeCall(patientData.phone, dynamicVariables);
-    
-    logger.info('Intake call created successfully', {
+    const callResponse = await retellService.createIntakeCall(
+      patientData.phone,
+      dynamicVariables,
+    );
+
+    logger.info("Intake call created successfully", {
       callId: callResponse.call_id,
       status: callResponse.status,
-      patientId: patientId
+      patientId: patientId,
     });
-    
+
     res.json({
       success: true,
       data: {
         callId: callResponse.call_id,
         status: callResponse.status,
-        message: 'Intake call triggered successfully',
-        patientId: patientId
-      }
+        message: "Intake call triggered successfully",
+        patientId: patientId,
+      },
     });
-    
   } catch (error) {
-    logger.error('Error triggering intake call', {
+    logger.error("Error triggering intake call", {
       error: error.message,
-      patientId: req.body?.patientId
+      patientId: req.body?.patientId,
     });
     next(error);
   }
@@ -999,11 +1025,11 @@ router.post('/trigger-intake-call', authMiddleware, async (req, res, next) => {
  *                   format: date-time
  *                   description: Next scheduled cleanup time (midnight PST)
  */
-router.get('/call-storage/stats', authMiddleware, (req, res) => {
+router.get("/call-storage/stats", authMiddleware, (req, res) => {
   const stats = callIdStorage.getStats();
   res.json({
     success: true,
-    data: stats
+    data: stats,
   });
 });
 
