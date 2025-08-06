@@ -1,5 +1,5 @@
-const { v4: uuidv4 } = require('uuid');
-const REDOX_CONFIG = require('../config/redox');
+const { v4: uuidv4 } = require("uuid");
+const REDOX_CONFIG = require("../config/redox");
 
 class RedoxTransformer {
   static createMessageHeader(eventUri, focusReference) {
@@ -7,103 +7,105 @@ class RedoxTransformer {
     return {
       fullUrl: `urn:uuid:${messageId}`,
       resource: {
-        resourceType: 'MessageHeader',
+        resourceType: "MessageHeader",
         id: messageId,
         eventUri,
         source: {
           name: REDOX_CONFIG.sourceApp,
-          endpoint: REDOX_CONFIG.sourceEndpoint
+          endpoint: REDOX_CONFIG.sourceEndpoint,
         },
-        focus: [{ reference: focusReference }]
-      }
+        focus: [{ reference: focusReference }],
+      },
     };
   }
 
   static createPatientSearchParams(phone) {
     return {
-      phone: phone
+      phone: phone,
     };
   }
 
   static createSlotSearchParams(location, serviceType, startTime) {
     const params = {};
-    
+
     if (location) {
-      params['location'] = location;
+      params["location"] = location;
     }
-    
+
     if (serviceType) {
-      params['service-type'] = JSON.stringify({ text: serviceType });
+      params["service-type"] = JSON.stringify({ text: serviceType });
     }
-    
+
     if (startTime) {
-      params['start'] = startTime;
+      params["start"] = startTime;
     }
-    
+
     return params;
   }
 
   static createAppointmentSearchParams(patientId) {
     const params = {};
-    
+
     if (patientId) {
-      params['patient'] = patientId;
+      params["patient"] = patientId;
     }
-    
+
     return params;
   }
 
   static transformSlotSearchResponse(redoxResponse) {
     const now = new Date();
-    
+
     // Extract slots from FHIR Bundle response
     let slots = [];
-    
+
     if (redoxResponse && redoxResponse.entry) {
       slots = redoxResponse.entry
-        .filter(entry => entry.resource && entry.resource.resourceType === 'Slot')
-        .filter(entry => entry.resource.status === 'free')
-        .map(entry => {
+        .filter(
+          (entry) => entry.resource && entry.resource.resourceType === "Slot",
+        )
+        .filter((entry) => entry.resource.status === "free")
+        .map((entry) => {
           const slot = entry.resource;
           return {
             slotId: slot.id,
             startTime: slot.start,
             endTime: slot.end,
             serviceType: slot.serviceType?.[0]?.text || null,
-            status: slot.status
+            status: slot.status,
           };
         })
-        .filter(slot => new Date(slot.startTime) > now); // Only future slots
+        .filter((slot) => new Date(slot.startTime) > now); // Only future slots
     }
 
     // If no future slots found, return exactly 4 dummy slots
     if (slots.length === 0) {
       const timeSlots = [
-        { day: 1, hour: 10, minute: 0 },  // Tomorrow 10:00 AM
-        { day: 1, hour: 14, minute: 0 },  // Tomorrow 2:00 PM
-        { day: 2, hour: 9, minute: 30 },  // Day after 9:30 AM
-        { day: 3, hour: 18, minute: 0 },  // 3 days later 3:00 PM
+        { day: 1, hour: 10, minute: 0 }, // Tomorrow 10:00 AM
+        { day: 1, hour: 14, minute: 0 }, // Tomorrow 2:00 PM
+        { day: 2, hour: 9, minute: 30 }, // Day after 9:30 AM
+        { day: 3, hour: 18, minute: 0 }, // 3 days later 3:00 PM
       ];
-      
+
       const serviceTypes = [
         "General Consultation",
-        "Follow-up Visit", 
+        "Follow-up Visit",
         "Routine Check-up",
         "Specialist Consultation",
-        "General Consultation"
+        "General Consultation",
       ];
 
       slots = timeSlots.map((timeSlot, index) => {
         const slotDate = new Date(now);
         slotDate.setDate(now.getDate() + timeSlot.day);
         slotDate.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
-        
+
         return {
           slotId: `dummy-slot-${slotDate.getTime()}`,
           startTime: slotDate.toISOString(),
           endTime: new Date(slotDate.getTime() + 30 * 60 * 1000).toISOString(),
           serviceType: serviceTypes[index],
-          status: "free"
+          status: "free",
         };
       });
     }
@@ -118,33 +120,51 @@ class RedoxTransformer {
     }
 
     const patients = redoxResponse.entry
-      .filter(entry => entry.resource && entry.resource.resourceType === 'Patient')
-      .map(entry => {
+      .filter(
+        (entry) => entry.resource && entry.resource.resourceType === "Patient",
+      )
+      .map((entry) => {
         const patient = entry.resource;
-        
+
         // Extract name
         const name = patient.name?.[0];
-        const fullName = name ? `${name.given?.[0] || ''} ${name.family || ''}`.trim() : 'Unknown';
-        
+        const fullName = name
+          ? `${name.given?.[0] || ""} ${name.family || ""}`.trim()
+          : "Unknown";
+
         // Extract phone number
-        const phoneContact = patient.telecom?.find(contact => contact.system === 'phone');
+        const phoneContact = patient.telecom?.find(
+          (contact) => contact.system === "phone",
+        );
         const phone = phoneContact?.value || null;
-        
+
         // Extract email
-        const emailContact = patient.telecom?.find(contact => contact.system === 'email');
+        const emailContact = patient.telecom?.find(
+          (contact) => contact.system === "email",
+        );
         const email = emailContact?.value || null;
-        
+
         // Extract address
         const address = patient.address?.[0];
-        const fullAddress = address ? `${address.line?.[0] || ''}, ${address.city || ''}, ${address.state || ''} ${address.postalCode || ''}`.trim() : null;
+        const fullAddress = address
+          ? `${address.line?.[0] || ""}, ${address.city || ""}, ${address.state || ""} ${address.postalCode || ""}`.trim()
+          : null;
         const zipCode = address?.postalCode || null;
-        
+
         // Extract insurance information from contact
-        const insuranceContact = patient.contact?.find(contact => 
-          contact.relationship?.[0]?.coding?.[0]?.code === 'I'
+        const insuranceContact = patient.contact?.find(
+          (contact) => contact.relationship?.[0]?.coding?.[0]?.code === "I",
         );
-        const insuranceName = insuranceContact?.name?.text || 'Flores-Rivera';
-        
+        const insuranceName = insuranceContact?.name?.text || "Flores-Rivera";
+
+        // Extract insurance member ID from identifiers
+        const insuranceMemberIdIdentifier = patient.identifier?.find(
+          (identifier) =>
+            identifier.system === "urn:redox:flow-ai:insurance" ||
+            identifier.type?.coding?.[0]?.code === "MB",
+        );
+        const insuranceMemberId = insuranceMemberIdIdentifier?.value || null;
+
         return {
           patientId: patient.id,
           fullName: fullName,
@@ -154,8 +174,8 @@ class RedoxTransformer {
           zipCode: zipCode,
           address: fullAddress,
           insuranceName: insuranceName,
-          insuranceType: 'PPO', // Static value
-          insuranceMemberId: 'MEM123456789' // Static value
+          insuranceType: "PPO", // Static value
+          insuranceMemberId: insuranceMemberId,
         };
       });
 
@@ -169,21 +189,26 @@ class RedoxTransformer {
     }
 
     const appointments = redoxResponse.entry
-      .filter(entry => entry.resource && entry.resource.resourceType === 'Appointment')
-      .map(entry => {
+      .filter(
+        (entry) =>
+          entry.resource && entry.resource.resourceType === "Appointment",
+      )
+      .map((entry) => {
         const appointment = entry.resource;
-        
+
         // Extract appointment type
-        const appointmentType = appointment.appointmentType?.coding?.[0]?.code || null;
-        const appointmentDisplay = appointment.appointmentType?.coding?.[0]?.display || null;
-        
+        const appointmentType =
+          appointment.appointmentType?.coding?.[0]?.code || null;
+        const appointmentDisplay =
+          appointment.appointmentType?.coding?.[0]?.display || null;
+
         return {
           appointmentId: appointment.id,
           appointmentType: appointmentType,
           startTime: appointment.start,
           status: appointment.status,
           description: appointment.description || null,
-          lastUpdated: appointment.meta?.lastUpdated || null
+          lastUpdated: appointment.meta?.lastUpdated || null,
         };
       })
       // Sort by lastUpdated or start time (most recent first)
@@ -199,43 +224,50 @@ class RedoxTransformer {
 
   static transformAppointmentCreateResponse(redoxResponse) {
     // Handle OperationOutcome (error response)
-    if (redoxResponse && redoxResponse.resourceType === 'OperationOutcome') {
+    if (redoxResponse && redoxResponse.resourceType === "OperationOutcome") {
       const issue = redoxResponse.issue?.[0];
-      const errorMessage = issue?.details?.text || issue?.diagnostics || 'Unknown error';
-      
+      const errorMessage =
+        issue?.details?.text || issue?.diagnostics || "Unknown error";
+
       return {
         statusCode: 400,
         error: errorMessage,
-        success: false
+        success: false,
       };
     }
 
     // Handle Bundle (success response)
-    if (redoxResponse && redoxResponse.resourceType === 'Bundle' && redoxResponse.entry) {
+    if (
+      redoxResponse &&
+      redoxResponse.resourceType === "Bundle" &&
+      redoxResponse.entry
+    ) {
       const entry = redoxResponse.entry[0];
       const response = entry?.response;
-      
+
       if (response) {
         // Extract status code from status string (e.g., "201 Created")
         const statusMatch = response.status?.match(/(\d+)/);
         const statusCode = statusMatch ? parseInt(statusMatch[1]) : 200;
-        
+
         // Extract generated ID from location URL
         let generatedId = null;
         if (response.location) {
           // Location format: https://fhir.redoxengine.com/fhir-sandbox/ResourceType/generated-id/_history/version
           // We need to extract the ID that comes after the resource type (Patient, Appointment, DocumentReference, etc.)
-          const locationMatch = response.location.match(/\/(Patient|Appointment|DocumentReference)\/([^\/]+)/);
+          const locationMatch = response.location.match(
+            /\/(Patient|Appointment|DocumentReference)\/([^\/]+)/,
+          );
           if (locationMatch && locationMatch[2]) {
             generatedId = locationMatch[2];
           }
         }
-        
+
         return {
           statusCode: statusCode,
           success: statusCode >= 200 && statusCode < 300,
           location: response.location || null,
-          generatedId: generatedId
+          generatedId: generatedId,
         };
       }
     }
@@ -243,53 +275,83 @@ class RedoxTransformer {
     // Default response for unexpected format
     return {
       statusCode: 200,
-      success: true
+      success: true,
     };
   }
 
-  static createAppointmentUpdateBundle(appointmentId, patientId, appointmentType, startTime, endTime, status = 'booked') {
+  static createAppointmentUpdateBundle(
+    appointmentId,
+    patientId,
+    appointmentType,
+    startTime,
+    endTime,
+    status = "booked",
+  ) {
     // Validate status according to FHIR spec
-    const validStatuses = ['proposed', 'pending', 'booked', 'arrived', 'fulfilled', 'cancelled', 'noshow', 'entered-in-error', 'checked-in', 'waitlist'];
+    const validStatuses = [
+      "proposed",
+      "pending",
+      "booked",
+      "arrived",
+      "fulfilled",
+      "cancelled",
+      "noshow",
+      "entered-in-error",
+      "checked-in",
+      "waitlist",
+    ];
     if (!validStatuses.includes(status)) {
-      status = 'booked'; // Default to 'booked' for updates
+      status = "booked"; // Default to 'booked' for updates
     }
     const appointmentUuid = `urn:uuid:appointment-${uuidv4()}`;
-    
+
     const messageHeader = this.createMessageHeader(
-      'https://fhir.redoxengine.com/EventDefinition/AppointmentUpdate',
-      appointmentUuid
+      "https://fhir.redoxengine.com/EventDefinition/AppointmentUpdate",
+      appointmentUuid,
     );
 
     // Sanitize appointment type if provided
-    const sanitizedType = appointmentType ? appointmentType.toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
-    
+    const sanitizedType = appointmentType
+      ? appointmentType.toUpperCase().replace(/[^A-Z0-9]/g, "")
+      : null;
+
     // Build appointment resource with only required fields + provided optional fields
     const appointmentResource = {
-      resourceType: 'Appointment',
+      resourceType: "Appointment",
       id: appointmentId,
-      identifier: [{
-        system: 'urn:redox:flow-ai:appointment',
-        value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-      }],
-      status: status,
-      participant: [{
-        actor: {
-          reference: `Patient/${patientId}`,
-          display: `Patient ${patientId.split('-')[0]}`
+      identifier: [
+        {
+          system: "urn:redox:flow-ai:appointment",
+          value: `appt-${new Date().toISOString().split("T")[0]}-${Math.floor(
+            Math.random() * 1000,
+          )
+            .toString()
+            .padStart(3, "0")}`,
         },
-        required: 'required',
-        status: 'accepted'
-      }]
+      ],
+      status: status,
+      participant: [
+        {
+          actor: {
+            reference: `Patient/${patientId}`,
+            display: `Patient ${patientId.split("-")[0]}`,
+          },
+          required: "required",
+          status: "accepted",
+        },
+      ],
     };
 
     // Add optional fields only if provided
     if (appointmentType) {
       appointmentResource.appointmentType = {
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
-          code: sanitizedType,
-          display: appointmentType // Use original as display
-        }]
+        coding: [
+          {
+            system: "http://terminology.hl7.org/CodeSystem/v2-0276",
+            code: sanitizedType,
+            display: appointmentType, // Use original as display
+          },
+        ],
       };
     }
 
@@ -302,79 +364,86 @@ class RedoxTransformer {
     }
 
     if (startTime && endTime) {
-      appointmentResource.minutesDuration = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
+      appointmentResource.minutesDuration = Math.round(
+        (new Date(endTime) - new Date(startTime)) / 60000,
+      );
     }
 
     const appointment = {
       fullUrl: appointmentUuid,
-      resource: appointmentResource
+      resource: appointmentResource,
     };
 
     return {
-      resourceType: 'Bundle',
-      type: 'message',
+      resourceType: "Bundle",
+      type: "message",
       timestamp: new Date().toISOString(),
-      entry: [messageHeader, appointment]
+      entry: [messageHeader, appointment],
     };
   }
 
   static createPatientUpdateBundle(patientData) {
     const patientUuid = `urn:uuid:patient-${uuidv4()}`;
-    
+
     const patient = {
       resource: {
-        resourceType: 'Patient',
+        resourceType: "Patient",
         id: patientData.patientId,
         identifier: [
           {
-            system: 'urn:redox:flow-ai:MR',
-            use: 'official',
-            value: patientData.medicalRecordNumber || `MR-${uuidv4()}`
-          }
+            system: "urn:redox:flow-ai:MR",
+            use: "official",
+            value: patientData.medicalRecordNumber || `MR-${uuidv4()}`,
+          },
         ],
         name: [],
-        gender: patientData.gender || 'unknown',
+        gender: patientData.gender || "unknown",
         birthDate: patientData.birthDate || null,
         telecom: [],
-        address: []
-      }
+        address: [],
+      },
     };
 
     // Add name if provided
     if (patientData.firstName || patientData.lastName) {
       patient.resource.name.push({
-        use: 'official',
-        family: patientData.lastName || 'Unknown',
-        given: [patientData.firstName || 'Unknown']
+        use: "official",
+        family: patientData.lastName || "Unknown",
+        given: [patientData.firstName || "Unknown"],
       });
     }
 
     // Add phone if provided
     if (patientData.phone) {
       patient.resource.telecom.push({
-        system: 'phone',
-        use: 'home',
-        value: patientData.phone
+        system: "phone",
+        use: "home",
+        value: patientData.phone,
       });
     }
 
     // Add email if provided
     if (patientData.email) {
       patient.resource.telecom.push({
-        system: 'email',
-        value: patientData.email
+        system: "email",
+        value: patientData.email,
       });
     }
 
     // Add address if provided
-    if (patientData.address || patientData.city || patientData.state || patientData.zipCode) {
+    if (
+      patientData.address ||
+      patientData.city ||
+      patientData.state ||
+      patientData.zipCode
+    ) {
       patient.resource.address.push({
-        use: 'home',
+        use: "home",
         line: patientData.address ? [patientData.address] : [],
         city: patientData.city || null,
         state: patientData.state || null,
         postalCode: patientData.zipCode || null,
-        country: patientData.country || 'US'
+        country: patientData.country || "US",
       });
     }
 
@@ -383,115 +452,132 @@ class RedoxTransformer {
       // Add insurance member ID as an identifier
       if (patientData.insuranceMemberId) {
         patient.resource.identifier.push({
-          system: 'urn:redox:flow-ai:insurance',
-          use: 'secondary',
+          system: "urn:redox:flow-ai:insurance",
+          use: "secondary",
           value: patientData.insuranceMemberId,
           type: {
-            coding: [{
-              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-              code: 'MB',
-              display: 'Member Number'
-            }]
-          }
+            coding: [
+              {
+                system: "http://terminology.hl7.org/CodeSystem/v2-0203",
+                code: "MB",
+                display: "Member Number",
+              },
+            ],
+          },
         });
       }
-      
+
       // Add insurance contact if name is provided
       if (patientData.insuranceName) {
-        patient.resource.contact = [{
-          name: {
-            text: patientData.insuranceName
+        patient.resource.contact = [
+          {
+            name: {
+              text: patientData.insuranceName,
+            },
+            relationship: [
+              {
+                coding: [
+                  {
+                    code: "I",
+                    display: "Insurance Company",
+                    system: "http://terminology.hl7.org/CodeSystem/v2-0131",
+                  },
+                ],
+                text: "Insurance Provider",
+              },
+            ],
           },
-          relationship: [{
-            coding: [{
-              code: 'I',
-              display: 'Insurance Company',
-              system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
-            }],
-            text: 'Insurance Provider'
-          }]
-        }];
+        ];
       }
     }
 
     const messageHeader = {
       resource: {
-        resourceType: 'MessageHeader',
-        eventUri: 'https://fhir.redoxengine.com/EventDefinition/PatientUpdate',
+        resourceType: "MessageHeader",
+        eventUri: "https://fhir.redoxengine.com/EventDefinition/PatientUpdate",
         source: {
           name: REDOX_CONFIG.sourceApp,
-          endpoint: REDOX_CONFIG.sourceEndpoint
+          endpoint: REDOX_CONFIG.sourceEndpoint,
         },
         focus: [
           {
-            reference: `Patient/${patientData.patientId}`
-          }
-        ]
-      }
+            reference: `Patient/${patientData.patientId}`,
+          },
+        ],
+      },
     };
 
     return {
-      resourceType: 'Bundle',
-      type: 'message',
-      entry: [messageHeader, patient]
+      resourceType: "Bundle",
+      type: "message",
+      entry: [messageHeader, patient],
     };
   }
 
   static createPatientBundle(patientData) {
     const patientUuid = `urn:uuid:patient-${uuidv4()}`;
-    
+
     const messageHeader = this.createMessageHeader(
-      'https://fhir.redoxengine.com/EventDefinition/PatientCreate',
-      patientUuid
+      "https://fhir.redoxengine.com/EventDefinition/PatientCreate",
+      patientUuid,
     );
 
     const patient = {
       fullUrl: patientUuid,
       resource: {
-        resourceType: 'Patient',
-        identifier: [{
-          system: 'urn:redox:flow-ai:MR',
-          use: 'official',
-          value: patientData.medicalRecordNumber || `MR-${uuidv4()}`
-        }],
-        name: [{
-          use: 'official',
-          family: patientData.lastName || 'Unknown',
-          given: [patientData.firstName || 'Unknown']
-        }],
-        gender: patientData.gender || 'unknown',
+        resourceType: "Patient",
+        identifier: [
+          {
+            system: "urn:redox:flow-ai:MR",
+            use: "official",
+            value: patientData.medicalRecordNumber || `MR-${uuidv4()}`,
+          },
+        ],
+        name: [
+          {
+            use: "official",
+            family: patientData.lastName || "Unknown",
+            given: [patientData.firstName || "Unknown"],
+          },
+        ],
+        gender: patientData.gender || "unknown",
         birthDate: patientData.birthDate || null,
         telecom: [],
-        address: []
-      }
+        address: [],
+      },
     };
 
     // Add phone if provided
     if (patientData.phone) {
       patient.resource.telecom.push({
-        system: 'phone',
-        use: 'home',
-        value: patientData.phone
+        system: "phone",
+        use: "home",
+        value: patientData.phone,
       });
     }
 
     // Add email if provided
     if (patientData.email) {
       patient.resource.telecom.push({
-        system: 'email',
-        value: patientData.email
+        system: "email",
+        value: patientData.email,
       });
     }
 
     // Add address if provided
-    if (patientData.address || patientData.city || patientData.state || patientData.zipCode) {
+    if (
+      patientData.address ||
+      patientData.city ||
+      patientData.state ||
+      patientData.zipCode
+    ) {
       patient.resource.address.push({
-        use: 'home',
+        use: "home",
         line: patientData.address ? [patientData.address] : [],
         city: patientData.city || null,
         state: patientData.state || null,
         postalCode: patientData.zipCode || null,
-        country: patientData.country || 'US'
+        country: patientData.country || "US",
       });
     }
 
@@ -500,48 +586,61 @@ class RedoxTransformer {
       // Add insurance member ID as an identifier
       if (patientData.insuranceMemberId) {
         patient.resource.identifier.push({
-          system: 'urn:redox:flow-ai:insurance',
-          use: 'secondary',
+          system: "urn:redox:flow-ai:insurance",
+          use: "secondary",
           value: patientData.insuranceMemberId,
           type: {
-            coding: [{
-              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
-              code: 'MB',
-              display: 'Member Number'
-            }]
-          }
+            coding: [
+              {
+                system: "http://terminology.hl7.org/CodeSystem/v2-0203",
+                code: "MB",
+                display: "Member Number",
+              },
+            ],
+          },
         });
       }
-      
+
       // Add insurance contact if name is provided
       if (patientData.insuranceName) {
-        patient.resource.contact = [{
-          name: {
-            text: patientData.insuranceName
+        patient.resource.contact = [
+          {
+            name: {
+              text: patientData.insuranceName,
+            },
+            relationship: [
+              {
+                coding: [
+                  {
+                    code: "I",
+                    display: "Insurance Company",
+                    system: "http://terminology.hl7.org/CodeSystem/v2-0131",
+                  },
+                ],
+                text: "Insurance Provider",
+              },
+            ],
           },
-          relationship: [{
-            coding: [{
-              code: 'I',
-              display: 'Insurance Company',
-              system: 'http://terminology.hl7.org/CodeSystem/v2-0131'
-            }],
-            text: 'Insurance Provider'
-          }]
-        }];
+        ];
       }
     }
 
     return {
-      resourceType: 'Bundle',
-      type: 'message',
+      resourceType: "Bundle",
+      type: "message",
       timestamp: new Date().toISOString(),
-      entry: [messageHeader, patient]
+      entry: [messageHeader, patient],
     };
   }
 
-  static createDocumentReferenceSearchParams(patientId, startDate, endDate, category) {
+  static createDocumentReferenceSearchParams(
+    patientId,
+    startDate,
+    endDate,
+    category,
+  ) {
     const params = {
-      patient: `Patient/${patientId}`
+      patient: `Patient/${patientId}`,
     };
 
     if (startDate || endDate) {
@@ -566,9 +665,9 @@ class RedoxTransformer {
       return [];
     }
 
-    return redoxResponse.entry.map(entry => {
+    return redoxResponse.entry.map((entry) => {
       const doc = entry.resource;
-      
+
       // Extract patient ID from subject reference
       let patientId = null;
       if (doc.subject?.reference) {
@@ -580,79 +679,108 @@ class RedoxTransformer {
 
       // Extract document content
       let documentContent = null;
-      if (doc.content && doc.content.length > 0 && doc.content[0].attachment?.data) {
+      if (
+        doc.content &&
+        doc.content.length > 0 &&
+        doc.content[0].attachment?.data
+      ) {
         try {
           // Decode base64 content
-          documentContent = Buffer.from(doc.content[0].attachment.data, 'base64').toString('utf-8');
+          documentContent = Buffer.from(
+            doc.content[0].attachment.data,
+            "base64",
+          ).toString("utf-8");
         } catch (error) {
-          logger.error('Error decoding document content', { error: error.message });
+          logger.error("Error decoding document content", {
+            error: error.message,
+          });
         }
       }
 
       return {
         documentId: doc.id,
         status: doc.status,
-        type: doc.type?.text || doc.type?.coding?.[0]?.display || 'Unknown',
-        category: doc.category?.[0]?.text || doc.category?.[0]?.coding?.[0]?.display || 'Unknown',
+        type: doc.type?.text || doc.type?.coding?.[0]?.display || "Unknown",
+        category:
+          doc.category?.[0]?.text ||
+          doc.category?.[0]?.coding?.[0]?.display ||
+          "Unknown",
         patientId: patientId,
         date: doc.date,
-        author: doc.author?.[0]?.display || 'Unknown',
+        author: doc.author?.[0]?.display || "Unknown",
         description: doc.description,
         content: documentContent,
-        contentType: doc.content?.[0]?.attachment?.contentType || 'text/plain',
-        title: doc.content?.[0]?.attachment?.title || 'Untitled'
+        contentType: doc.content?.[0]?.attachment?.contentType || "text/plain",
+        title: doc.content?.[0]?.attachment?.title || "Untitled",
       };
     });
   }
 
-  static createDocumentReferenceBundle(patientId, documentContent, metadata = {}) {
+  static createDocumentReferenceBundle(
+    patientId,
+    documentContent,
+    metadata = {},
+  ) {
     const documentUuid = `urn:uuid:document-${uuidv4()}`;
-    
+
     const messageHeader = this.createMessageHeader(
-      'https://fhir.redoxengine.com/EventDefinition/DocumentReferenceCreate',
-      documentUuid
+      "https://fhir.redoxengine.com/EventDefinition/DocumentReferenceCreate",
+      documentUuid,
     );
 
     const documentReference = {
       fullUrl: documentUuid,
       resource: {
-        resourceType: 'DocumentReference',
-        identifier: [{
-          system: 'urn:redox:flow-ai:document',
-          value: `DOC-${uuidv4()}`
-        }],
-        status: 'current',
+        resourceType: "DocumentReference",
+        identifier: [
+          {
+            system: "urn:redox:flow-ai:document",
+            value: `DOC-${uuidv4()}`,
+          },
+        ],
+        status: "current",
         type: {
-          coding: [{
-            system: 'http://loinc.org',
-            code: '34117-2',
-            display: 'History and physical note'
-          }],
-          text: 'History and Physical'
+          coding: [
+            {
+              system: "http://loinc.org",
+              code: "34117-2",
+              display: "History and physical note",
+            },
+          ],
+          text: "History and Physical",
         },
-        category: [{
-          coding: [{
-            system: 'http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category',
-            code: 'clinical-note',
-            display: 'Clinical Note'
-          }],
-          text: 'Clinical Note'
-        }],
+        category: [
+          {
+            coding: [
+              {
+                system:
+                  "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                code: "clinical-note",
+                display: "Clinical Note",
+              },
+            ],
+            text: "Clinical Note",
+          },
+        ],
         subject: {
           reference: `Patient/${patientId}`,
-          display: `Patient ${patientId}`
+          display: `Patient ${patientId}`,
         },
         date: new Date().toISOString(),
-        author: [{
-          display: 'Flow AI System'
-        }],
-        content: [{
-          attachment: {
-            contentType: 'text/plain',
-            data: Buffer.from(documentContent).toString('base64'),
-            title: 'Patient Intake Details'
-          }
-        }],
+        author: [
+          {
+            display: "Flow AI System",
+          },
+        ],
+        content: [
+          {
+            attachment: {
+              contentType: "text/plain",
+              data: Buffer.from(documentContent).toString("base64"),
+              title: "Patient Intake Details",
+            },
+          },
+        ],
         // Remove context.related as it references non-existent Encounter
         // context: {
         //   related: metadata.callId ? [{
@@ -660,120 +788,149 @@ class RedoxTransformer {
         //     display: `Call ${metadata.callId}`
         //   }] : []
         // },
-        description: 'Patient intake information collected during call'
-      }
+        description: "Patient intake information collected during call",
+      },
     };
 
     return {
-      resourceType: 'Bundle',
-      type: 'message',
+      resourceType: "Bundle",
+      type: "message",
       timestamp: new Date().toISOString(),
-      entry: [messageHeader, documentReference]
+      entry: [messageHeader, documentReference],
     };
   }
 
-  static createAppointmentBundle(patientId, appointmentType, startTime, endTime, status) {
+  static createAppointmentBundle(
+    patientId,
+    appointmentType,
+    startTime,
+    endTime,
+    status,
+  ) {
     // Validate and set default status according to FHIR spec
-    const validStatuses = ['proposed', 'pending', 'booked', 'arrived', 'fulfilled', 'cancelled', 'noshow', 'entered-in-error', 'checked-in', 'waitlist'];
+    const validStatuses = [
+      "proposed",
+      "pending",
+      "booked",
+      "arrived",
+      "fulfilled",
+      "cancelled",
+      "noshow",
+      "entered-in-error",
+      "checked-in",
+      "waitlist",
+    ];
     if (!status || !validStatuses.includes(status)) {
-      status = 'proposed'; // Default to 'proposed' for new appointments
+      status = "proposed"; // Default to 'proposed' for new appointments
     }
     const appointmentUuid = `urn:uuid:appointment-1`;
-    
+
     const messageHeader = this.createMessageHeader(
-      'https://fhir.redoxengine.com/EventDefinition/AppointmentCreate',
-      appointmentUuid
+      "https://fhir.redoxengine.com/EventDefinition/AppointmentCreate",
+      appointmentUuid,
     );
 
     // Map appointment types to proper display values and defaults
     const appointmentDefaults = {
-      'FOLLOWUP': {
-        display: 'A follow up visit from a previous appointment',
-        reasonCode: '185389009',
-        reasonDisplay: 'Follow-up visit',
-        reasonText: 'Follow-up for MRI results',
-        description: 'Follow-up appointment to discuss MRI brain results',
-        comment: 'Patient to bring MRI images if available'
+      FOLLOWUP: {
+        display: "A follow up visit from a previous appointment",
+        reasonCode: "185389009",
+        reasonDisplay: "Follow-up visit",
+        reasonText: "Follow-up for MRI results",
+        description: "Follow-up appointment to discuss MRI brain results",
+        comment: "Patient to bring MRI images if available",
       },
-      'ROUTINE': {
-        display: 'Routine visit',
-        reasonCode: '390906007',
-        reasonDisplay: 'Routine visit',
-        reasonText: 'Routine check-up',
-        description: 'Routine appointment for general health assessment',
-        comment: 'Please bring any current medications'
+      ROUTINE: {
+        display: "Routine visit",
+        reasonCode: "390906007",
+        reasonDisplay: "Routine visit",
+        reasonText: "Routine check-up",
+        description: "Routine appointment for general health assessment",
+        comment: "Please bring any current medications",
       },
-      'CONSULTATION': {
-        display: 'Consultation appointment',
-        reasonCode: '11429006',
-        reasonDisplay: 'Consultation',
-        reasonText: 'Medical consultation',
-        description: 'Consultation appointment with specialist',
-        comment: 'Please bring previous medical records'
+      CONSULTATION: {
+        display: "Consultation appointment",
+        reasonCode: "11429006",
+        reasonDisplay: "Consultation",
+        reasonText: "Medical consultation",
+        description: "Consultation appointment with specialist",
+        comment: "Please bring previous medical records",
       },
-      'CHECKUP': {
-        display: 'A routine check-up, such as an annual physical',
-        reasonCode: '390906007',
-        reasonDisplay: 'Routine visit',
-        reasonText: 'Annual check-up',
-        description: 'Annual physical examination',
-        comment: 'Fasting may be required for blood work'
+      CHECKUP: {
+        display: "A routine check-up, such as an annual physical",
+        reasonCode: "390906007",
+        reasonDisplay: "Routine visit",
+        reasonText: "Annual check-up",
+        description: "Annual physical examination",
+        comment: "Fasting may be required for blood work",
       },
-      'WALKIN': {
-        display: 'A previously unscheduled walk-in visit',
-        reasonCode: '185389009',
-        reasonDisplay: 'Walk-in visit',
-        reasonText: 'Walk-in appointment',
-        description: 'Walk-in appointment for immediate care',
-        comment: null
+      WALKIN: {
+        display: "A previously unscheduled walk-in visit",
+        reasonCode: "185389009",
+        reasonDisplay: "Walk-in visit",
+        reasonText: "Walk-in appointment",
+        description: "Walk-in appointment for immediate care",
+        comment: null,
       },
-      'IMAGING': {
-        display: 'Diagnostic imaging appointment',
-        reasonCode: '363679005',
-        reasonDisplay: 'Imaging',
-        reasonText: 'Diagnostic imaging',
-        description: 'Appointment for diagnostic imaging studies',
-        comment: 'Please arrive 15 minutes early'
+      IMAGING: {
+        display: "Diagnostic imaging appointment",
+        reasonCode: "363679005",
+        reasonDisplay: "Imaging",
+        reasonText: "Diagnostic imaging",
+        description: "Appointment for diagnostic imaging studies",
+        comment: "Please arrive 15 minutes early",
       },
-      'XRAY': {
-        display: 'X-ray imaging appointment',
-        reasonCode: '363679005',
-        reasonDisplay: 'X-ray imaging',
-        reasonText: 'X-ray study',
-        description: 'X-ray imaging appointment',
-        comment: 'Please arrive 15 minutes early'
-      }
+      XRAY: {
+        display: "X-ray imaging appointment",
+        reasonCode: "363679005",
+        reasonDisplay: "X-ray imaging",
+        reasonText: "X-ray study",
+        description: "X-ray imaging appointment",
+        comment: "Please arrive 15 minutes early",
+      },
     };
 
     // Build appointment resource with only required fields + provided optional fields
     const appointmentResource = {
-      resourceType: 'Appointment',
-      identifier: [{
-        system: 'urn:redox:flow-ai:appointment',
-        value: `appt-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
-      }],
-      status: status,
-      participant: [{
-        actor: {
-          reference: `Patient/${patientId}`,
-          display: `Patient ${patientId.split('-')[0]}`
+      resourceType: "Appointment",
+      identifier: [
+        {
+          system: "urn:redox:flow-ai:appointment",
+          value: `appt-${new Date().toISOString().split("T")[0]}-${Math.floor(
+            Math.random() * 1000,
+          )
+            .toString()
+            .padStart(3, "0")}`,
         },
-        required: 'required',
-        status: 'accepted'
-      }]
+      ],
+      status: status,
+      participant: [
+        {
+          actor: {
+            reference: `Patient/${patientId}`,
+            display: `Patient ${patientId.split("-")[0]}`,
+          },
+          required: "required",
+          status: "accepted",
+        },
+      ],
     };
 
     // Add optional fields only if provided
     if (appointmentType) {
       // Sanitize appointment type for code (remove spaces, special chars)
-      const sanitizedType = appointmentType.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      
+      const sanitizedType = appointmentType
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+
       appointmentResource.appointmentType = {
-        coding: [{
-          system: 'http://terminology.hl7.org/CodeSystem/v2-0276',
-          code: sanitizedType,
-          display: appointmentType // Use original as display
-        }]
+        coding: [
+          {
+            system: "http://terminology.hl7.org/CodeSystem/v2-0276",
+            code: sanitizedType,
+            display: appointmentType, // Use original as display
+          },
+        ],
       };
     }
 
@@ -786,20 +943,21 @@ class RedoxTransformer {
     }
 
     if (startTime && endTime) {
-      appointmentResource.minutesDuration = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
+      appointmentResource.minutesDuration = Math.round(
+        (new Date(endTime) - new Date(startTime)) / 60000,
+      );
     }
-
 
     const appointment = {
       fullUrl: appointmentUuid,
-      resource: appointmentResource
+      resource: appointmentResource,
     };
 
     return {
-      resourceType: 'Bundle',
-      type: 'message',
+      resourceType: "Bundle",
+      type: "message",
       timestamp: new Date().toISOString(),
-      entry: [messageHeader, appointment]
+      entry: [messageHeader, appointment],
     };
   }
 }
