@@ -469,8 +469,13 @@ router.post("/function-call", async (req, res, next) => {
         );
 
         // Execute patient search through Redox API
-        const searchService = new RedoxAPIService(accessToken);
-        const searchResponse = await searchService.searchPatient(searchParams);
+        const searchResponse = await RedoxAPIService.makeRequest(
+          "POST",
+          "/Patient/_search",
+          null,
+          searchParams,
+          accessToken
+        );
 
         // Transform response to get simplified patient list
         const patients = RedoxTransformer.transformPatientSearchByDobZipResponse(
