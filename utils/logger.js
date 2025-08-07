@@ -1,3 +1,4 @@
+require("dotenv").config();
 const logger = {
   info: (message, data = {}) => {
     console.log(`[INFO] ${new Date().toISOString()} - ${message}`, data);
@@ -9,10 +10,10 @@ const logger = {
     console.warn(`[WARN] ${new Date().toISOString()} - ${message}`, data);
   },
   debug: (message, data = {}) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       console.log(`[DEBUG] ${new Date().toISOString()} - ${message}`, data);
     }
-  }
+  },
 };
 
 module.exports = logger;

@@ -17,6 +17,8 @@ const redoxWebhookRoutes = require('./routes/redoxWebhook');
 const retellAgentRoutes = require('./routes/retellAgent');
 const documentReferenceRoutes = require('./routes/documentReference');
 
+require('dotenv').config();
+
 const app = express();
 const PORT = process.env.PORT || 3002;
 

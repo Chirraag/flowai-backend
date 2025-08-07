@@ -1,6 +1,8 @@
 const { Pool } = require("pg");
 const logger = require("../utils/logger");
 
+require("dotenv").config();
+
 // Configure the PostgreSQL connection pool
 
 // CRITICAL: Set this before creating the pool

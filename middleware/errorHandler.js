@@ -1,17 +1,18 @@
-const logger = require('../utils/logger');
+const logger = require("../utils/logger");
+require("dotenv").config();
 
 const errorHandler = (error, req, res, next) => {
-  logger.error('Request error', {
+  logger.error("Request error", {
     path: req.path,
     method: req.method,
     error: error.message,
-    stack: error.stack
+    stack: error.stack,
   });
-  
+
   res.status(error.status || 500).json({
     success: false,
-    error: error.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    error: error.message || "Internal Server Error",
+    ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
   });
 };
 

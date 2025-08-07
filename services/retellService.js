@@ -1,22 +1,26 @@
-const axios = require('axios');
-const logger = require('../utils/logger');
+const axios = require("axios");
+const logger = require("../utils/logger");
+require("dotenv").config();
 
 class RetellService {
   constructor() {
     this.apiKey = process.env.RETELL_API_KEY;
-    this.baseUrl = 'https://api.retellai.com/v2';
-    
+    this.baseUrl = "https://api.retellai.com/v2";
+
     // Agent configurations
     this.schedulingConfig = {
-      agentId: process.env.RETELL_SCHEDULING_AGENT_ID || process.env.RETELL_AGENT_ID,
-      fromNumber: process.env.RETELL_SCHEDULING_FROM_NUMBER || process.env.RETELL_FROM_NUMBER
+      agentId:
+        process.env.RETELL_SCHEDULING_AGENT_ID || process.env.RETELL_AGENT_ID,
+      fromNumber:
+        process.env.RETELL_SCHEDULING_FROM_NUMBER ||
+        process.env.RETELL_FROM_NUMBER,
     };
-    
+
     this.intakeConfig = {
       agentId: process.env.RETELL_INTAKE_AGENT_ID,
-      fromNumber: process.env.RETELL_INTAKE_FROM_NUMBER
+      fromNumber: process.env.RETELL_INTAKE_FROM_NUMBER,
     };
-    
+
     // Legacy support
     this.fromNumber = process.env.RETELL_FROM_NUMBER;
     this.agentId = process.env.RETELL_AGENT_ID;
@@ -29,7 +33,12 @@ class RetellService {
    * @returns {Promise<object>} - The call creation response
    */
   async createSchedulingCall(toNumber, dynamicVariables) {
-    return this._createCall(toNumber, dynamicVariables, this.schedulingConfig, 'scheduling');
+    return this._createCall(
+      toNumber,
+      dynamicVariables,
+      this.schedulingConfig,
+      "scheduling",
+    );
   }
 
   /**
@@ -39,7 +48,12 @@ class RetellService {
    * @returns {Promise<object>} - The call creation response
    */
   async createIntakeCall(toNumber, dynamicVariables) {
-    return this._createCall(toNumber, dynamicVariables, this.intakeConfig, 'intake');
+    return this._createCall(
+      toNumber,
+      dynamicVariables,
+      this.intakeConfig,
+      "intake",
+    );
   }
 
   /**
@@ -49,10 +63,15 @@ class RetellService {
    * @returns {Promise<object>} - The call creation response
    */
   async createPhoneCall(toNumber, dynamicVariables) {
-    return this._createCall(toNumber, dynamicVariables, {
-      agentId: this.agentId,
-      fromNumber: this.fromNumber
-    }, 'legacy');
+    return this._createCall(
+      toNumber,
+      dynamicVariables,
+      {
+        agentId: this.agentId,
+        fromNumber: this.fromNumber,
+      },
+      "legacy",
+    );
   }
 
   /**
@@ -62,7 +81,7 @@ class RetellService {
   async _createCall(toNumber, dynamicVariables, config, callType) {
     try {
       if (!this.apiKey) {
-        throw new Error('RETELL_API_KEY not configured');
+        throw new Error("RETELL_API_KEY not configured");
       }
 
       if (!config.fromNumber) {
@@ -76,14 +95,14 @@ class RetellService {
       // Ensure all dynamic variables are strings
       const stringifiedVariables = {};
       for (const [key, value] of Object.entries(dynamicVariables)) {
-        stringifiedVariables[key] = String(value || '');
+        stringifiedVariables[key] = String(value || "");
       }
 
       const payload = {
         agent_id: config.agentId,
         from_number: config.fromNumber,
         to_number: toNumber,
-        retell_llm_dynamic_variables: stringifiedVariables
+        retell_llm_dynamic_variables: stringifiedVariables,
       };
 
       logger.info(`Creating outbound ${callType} call via Retell`, {
@@ -91,7 +110,7 @@ class RetellService {
         fromNumber: config.fromNumber,
         agentId: config.agentId,
         callType,
-        variableCount: Object.keys(stringifiedVariables).length
+        variableCount: Object.keys(stringifiedVariables).length,
       });
 
       const response = await axios.post(
@@ -99,23 +118,22 @@ class RetellService {
         payload,
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+          },
+        },
       );
 
-      logger.info('Outbound call created successfully', {
+      logger.info("Outbound call created successfully", {
         callId: response.data.call_id,
-        status: response.data.status
+        status: response.data.status,
       });
 
       return response.data;
-
     } catch (error) {
-      logger.error('Error creating outbound call', {
+      logger.error("Error creating outbound call", {
         error: error.message,
-        response: error.response?.data
+        response: error.response?.data,
       });
       throw error;
     }
@@ -128,21 +146,17 @@ class RetellService {
    */
   async getCallDetails(callId) {
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/get-call/${callId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`
-          }
-        }
-      );
+      const response = await axios.get(`${this.baseUrl}/get-call/${callId}`, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+      });
 
       return response.data;
-
     } catch (error) {
-      logger.error('Error getting call details', {
+      logger.error("Error getting call details", {
         callId,
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
@@ -160,18 +174,17 @@ class RetellService {
         {},
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`
-          }
-        }
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+        },
       );
 
-      logger.info('Call ended successfully', { callId });
+      logger.info("Call ended successfully", { callId });
       return response.data;
-
     } catch (error) {
-      logger.error('Error ending call', {
+      logger.error("Error ending call", {
         callId,
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
