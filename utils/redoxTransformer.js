@@ -43,7 +43,7 @@ class RedoxTransformer {
     const params = {};
 
     if (location) {
-      params["location"] = location;
+      params["location.name"] = location;
     }
 
     if (serviceType) {
@@ -216,8 +216,8 @@ class RedoxTransformer {
           : "Unknown";
 
         return {
-          patient_id: patient.id,
-          patient_name: fullName
+          patientId: patient.id,
+          patientName: fullName
         };
       });
 
@@ -345,7 +345,7 @@ class RedoxTransformer {
     if (!validStatuses.includes(status)) {
       status = "booked"; // Default to 'booked' for updates
     }
-    const appointmentUuid = `urn:uuid:appointment-${uuidv4()}`;
+    const appointmentUuid = `urn:uuid:${uuidv4()}`;
 
     const messageHeader = this.createMessageHeader(
       "https://fhir.redoxengine.com/EventDefinition/AppointmentUpdate",
@@ -425,7 +425,7 @@ class RedoxTransformer {
   }
 
   static createPatientUpdateBundle(patientData) {
-    const patientUuid = `urn:uuid:patient-${uuidv4()}`;
+    const patientUuid = `urn:uuid:${uuidv4()}`;
 
     const patient = {
       resource: {
@@ -557,7 +557,7 @@ class RedoxTransformer {
   }
 
   static createPatientBundle(patientData) {
-    const patientUuid = `urn:uuid:patient-${uuidv4()}`;
+    const patientUuid = `urn:uuid:${uuidv4()}`;
 
     const messageHeader = this.createMessageHeader(
       "https://fhir.redoxengine.com/EventDefinition/PatientCreate",
@@ -763,7 +763,7 @@ class RedoxTransformer {
     documentContent,
     metadata = {},
   ) {
-    const documentUuid = `urn:uuid:document-${uuidv4()}`;
+    const documentUuid = `urn:uuid:${uuidv4()}`;
 
     const messageHeader = this.createMessageHeader(
       "https://fhir.redoxengine.com/EventDefinition/DocumentReferenceCreate",
@@ -865,7 +865,7 @@ class RedoxTransformer {
     if (!status || !validStatuses.includes(status)) {
       status = "proposed"; // Default to 'proposed' for new appointments
     }
-    const appointmentUuid = `urn:uuid:appointment-1`;
+    const appointmentUuid = `urn:uuid:${uuidv4()}`;
 
     const messageHeader = this.createMessageHeader(
       "https://fhir.redoxengine.com/EventDefinition/AppointmentCreate",
