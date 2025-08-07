@@ -194,7 +194,7 @@ router.post("/webhook", async (req, res, next) => {
  *                     description: Access token from call context
  *               name:
  *                 type: string
- *                 enum: [check_availability, book_appointment, update_appointment, create_patient]
+ *                 enum: [check_availability, book_appointment, update_appointment, create_patient, find_patient]
  *                 description: Function name
  *               args:
  *                 type: object
@@ -443,6 +443,54 @@ router.post("/function-call", async (req, res, next) => {
           error: createResult.error || null,
         };
         break;
+
+      case "find_patient": {
+        logger.info("Processing find_patient function call");
+
+        // Extract patient search parameters from args
+        const { birth_date, zip_code } = args;
+
+        // Validate required fields
+        if (!birth_date || !zip_code) {
+          logger.warn("find_patient failed: missing required fields", {
+            birth_date,
+            zip_code,
+          });
+          return res.status(400).json({
+            success: false,
+            error: "Missing required fields: birth_date and zip_code are required",
+          });
+        }
+
+        // Create search parameters
+        const searchParams = RedoxTransformer.createPatientSearchByDobZipParams(
+          birth_date,
+          zip_code,
+        );
+
+        // Execute patient search through Redox API
+        const searchService = new RedoxAPIService(accessToken);
+        const searchResponse = await searchService.searchPatient(searchParams);
+
+        // Transform response to get simplified patient list
+        const patients = RedoxTransformer.transformPatientSearchByDobZipResponse(
+          searchResponse,
+        );
+
+        logger.info("Patient search by DOB and zip completed", {
+          patientsFound: patients.length,
+          birth_date,
+          zip_code,
+        });
+
+        // Return the patients list as the result
+        result = {
+          success: true,
+          patients: patients,
+          count: patients.length,
+        };
+        break;
+      }
 
       default:
         logger.warn("Unsupported function call received", {
