@@ -25,6 +25,20 @@ class RedoxTransformer {
     };
   }
 
+  static createPatientSearchByDobZipParams(birthDate, zipCode) {
+    const params = {};
+    
+    if (birthDate) {
+      params["birthdate"] = birthDate;
+    }
+    
+    if (zipCode) {
+      params["address-postalcode"] = zipCode;
+    }
+    
+    return params;
+  }
+
   static createSlotSearchParams(location, serviceType, startTime) {
     const params = {};
 
@@ -176,6 +190,34 @@ class RedoxTransformer {
           insuranceName: insuranceName,
           insuranceType: "PPO", // Static value
           insuranceMemberId: insuranceMemberId,
+        };
+      });
+
+    return patients;
+  }
+
+  static transformPatientSearchByDobZipResponse(redoxResponse) {
+    // Extract patients from FHIR Bundle response - simplified for multiple patient results
+    if (!redoxResponse || !redoxResponse.entry) {
+      return [];
+    }
+
+    const patients = redoxResponse.entry
+      .filter(
+        (entry) => entry.resource && entry.resource.resourceType === "Patient",
+      )
+      .map((entry) => {
+        const patient = entry.resource;
+
+        // Extract name
+        const name = patient.name?.[0];
+        const fullName = name
+          ? `${name.given?.[0] || ""} ${name.family || ""}`.trim()
+          : "Unknown";
+
+        return {
+          patient_id: patient.id,
+          patient_name: fullName
         };
       });
 

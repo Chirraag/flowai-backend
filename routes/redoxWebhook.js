@@ -264,6 +264,20 @@ function transformFhirPatient(fhirPatient) {
   const telecom = fhirPatient.telecom || [];
   const address = fhirPatient.address?.[0] || {};
   
+  // Extract insurance information from contact
+  const insuranceContact = fhirPatient.contact?.find(
+    (contact) => contact.relationship?.[0]?.coding?.[0]?.code === "I"
+  );
+  const insuranceName = insuranceContact?.name?.text || null;
+  
+  // Extract insurance member ID from identifiers
+  const insuranceMemberIdIdentifier = fhirPatient.identifier?.find(
+    (identifier) =>
+      identifier.system === "urn:redox:flow-ai:insurance" ||
+      identifier.type?.coding?.[0]?.code === "MB"
+  );
+  const insuranceMemberId = insuranceMemberIdIdentifier?.value || null;
+  
   logger.info('FHIR patient parsing details', {
     nameFields: {
       given: name.given,
@@ -276,6 +290,12 @@ function transformFhirPatient(fhirPatient) {
       city: address.city,
       state: address.state,
       postalCode: address.postalCode
+    },
+    insuranceFields: {
+      hasContact: !!insuranceContact,
+      hasIdentifier: !!insuranceMemberIdIdentifier,
+      insuranceName: insuranceName || 'NOT_FOUND',
+      insuranceMemberId: insuranceMemberId || 'NOT_FOUND'
     }
   });
   
@@ -316,9 +336,9 @@ function transformFhirPatient(fhirPatient) {
     dateOfBirth: fhirPatient.birthDate || '',
     zipCode: address.postalCode || '',
     address: `${address.line?.join(' ') || ''} ${address.city || ''} ${address.state || ''} ${address.postalCode || ''}`.trim(),
-    insuranceName: 'Blue Cross Blue Shield',
-    insuranceType: 'PPO',
-    insuranceMemberId: 'MEM123456789'
+    insuranceName: insuranceName || '',
+    insuranceType: '', // No insurance type in FHIR patient data, leaving empty
+    insuranceMemberId: insuranceMemberId || ''
   };
 }
 
