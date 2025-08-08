@@ -52,6 +52,11 @@ const authService = new AuthService();
  */
 router.post('/webhook/scheduling', oauthMiddleware, async (req, res) => {
   try {
+    // Log the full payload for debugging (remove this after testing)
+    logger.info('Full Redox webhook payload received', {
+      payload: JSON.stringify(req.body)
+    });
+    
     logger.info('Received Redox scheduling webhook', { 
       eventType: req.body.Meta?.EventType,
       dataModel: req.body.Meta?.DataModel,
@@ -62,7 +67,8 @@ router.post('/webhook/scheduling', oauthMiddleware, async (req, res) => {
     const bundle = req.body;
     
     // Validate event structure
-    if (!bundle.entry || !bundle.Meta || bundle.resourceType !== 'Bundle') {
+    // Note: Meta field might be at different levels or missing in some Redox configurations
+    if (!bundle.entry || bundle.resourceType !== 'Bundle') {
       logger.error('Invalid webhook payload structure', {
         hasEntry: !!bundle.entry,
         hasMeta: !!bundle.Meta,
@@ -72,6 +78,13 @@ router.post('/webhook/scheduling', oauthMiddleware, async (req, res) => {
         metaKeys: bundle.Meta ? Object.keys(bundle.Meta) : null
       });
       return res.status(400).json({ error: 'Invalid webhook payload' });
+    }
+    
+    // Meta is optional - log warning if missing but continue processing
+    if (!bundle.Meta) {
+      logger.warn('Meta field missing from Redox webhook - using defaults', {
+        bundleKeys: Object.keys(bundle || {})
+      });
     }
 
     // Extract patient resource from bundle
