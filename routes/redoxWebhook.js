@@ -63,7 +63,14 @@ router.post('/webhook/scheduling', oauthMiddleware, async (req, res) => {
     
     // Validate event structure
     if (!bundle.entry || !bundle.Meta || bundle.resourceType !== 'Bundle') {
-      logger.error('Invalid webhook payload structure');
+      logger.error('Invalid webhook payload structure', {
+        hasEntry: !!bundle.entry,
+        hasMeta: !!bundle.Meta,
+        resourceType: bundle.resourceType,
+        bundleKeys: Object.keys(bundle || {}),
+        entryLength: bundle.entry?.length,
+        metaKeys: bundle.Meta ? Object.keys(bundle.Meta) : null
+      });
       return res.status(400).json({ error: 'Invalid webhook payload' });
     }
 
@@ -303,8 +310,32 @@ function transformFhirPatient(fhirPatient) {
     }
   });
   
-  const phone = telecom.find(t => t.system === 'phone')?.value || '';
+  let phone = telecom.find(t => t.system === 'phone')?.value || '';
   const email = telecom.find(t => t.system === 'email')?.value || '';
+  
+  // Convert phone to E.164 format if needed
+  if (phone) {
+    // Remove all non-digit characters
+    let phoneDigits = phone.replace(/\D/g, '');
+    
+    // Add country code if missing (assume US +1)
+    if (phoneDigits.length === 10) {
+      // US number without country code
+      phone = '+1' + phoneDigits;
+    } else if (phoneDigits.length === 11 && phoneDigits.startsWith('1')) {
+      // US number with country code
+      phone = '+' + phoneDigits;
+    } else if (!phone.startsWith('+')) {
+      // Keep original if already has + or if not standard US format
+      phone = '+' + phoneDigits;
+    }
+    
+    logger.info('Phone number conversion', {
+      original: telecom.find(t => t.system === 'phone')?.value,
+      converted: phone,
+      isE164: /^\+[1-9]\d{1,14}$/.test(phone)
+    });
+  }
   
   // Build full name and validate it's not empty
   const fullName = `${name.given?.join(' ') || ''} ${name.family || ''}`.trim();
