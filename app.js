@@ -16,6 +16,7 @@ const retellWebhookRoutes = require('./routes/retellWebhook');
 const redoxWebhookRoutes = require('./routes/redoxWebhook');
 const retellAgentRoutes = require('./routes/retellAgent');
 const documentReferenceRoutes = require('./routes/documentReference');
+const oauthRoutes = require('./routes/oauth');
 
 require('dotenv').config();
 
@@ -128,6 +129,9 @@ app.use('/api/v1/retell/agent', retellAgentRoutes);
 app.use('/api/v1/redox', redoxWebhookRoutes);
 app.use('/api/v1/document-reference', documentReferenceRoutes);
 
+// OAuth Routes (no prefix as per standard OAuth conventions)
+app.use('/oauth', oauthRoutes);
+
 // Error handling
 app.use(errorHandler);
 
@@ -140,6 +144,8 @@ app.use('*', (req, res) => {
     availableEndpoints: [
       '/health',
       '/api-docs',
+      '/oauth/token',
+      '/oauth/health',
       '/api/v1/patient/search',
       '/api/v1/patient/create',
       '/api/v1/patient/update',

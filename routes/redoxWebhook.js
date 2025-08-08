@@ -6,6 +6,7 @@ const RedoxTransformer = require('../utils/redoxTransformer');
 const retellService = require('../services/retellService');
 const AuthService = require('../services/authService');
 const authenticate = require('../middleware/auth');
+const oauthMiddleware = require('../middleware/oauthMiddleware');
 
 const authService = new AuthService();
 
@@ -47,12 +48,15 @@ const authService = new AuthService();
 /**
  * Webhook endpoint for Redox scheduling updates
  * Listens for service request events and triggers outbound calls via Retell
+ * Requires OAuth authentication via Bearer token
  */
-router.post('/webhook/scheduling', async (req, res) => {
+router.post('/webhook/scheduling', oauthMiddleware, async (req, res) => {
   try {
     logger.info('Received Redox scheduling webhook', { 
       eventType: req.body.Meta?.EventType,
-      dataModel: req.body.Meta?.DataModel
+      dataModel: req.body.Meta?.DataModel,
+      clientName: req.oauthClient?.clientName,
+      clientId: req.oauthClient?.clientId ? req.oauthClient.clientId.substring(0, 8) + '...' : 'unknown'
     });
 
     const bundle = req.body;
