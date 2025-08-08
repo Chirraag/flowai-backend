@@ -245,15 +245,17 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
     }
 
     // Trigger outbound call via Retell
-    logger.info('Triggering outbound call via Retell', {
+    logger.info('Would trigger outbound call via Retell (currently disabled)', {
       phone: patientData.phone,
       variableCount: Object.keys(dynamicVariables).length,
       patientId: redoxPatientId
     });
     
-    await retellService.createSchedulingCall(patientData.phone, dynamicVariables);
+    // TEMPORARILY DISABLED: Retell call triggering
+    // Uncomment the line below to enable actual calls
+    // await retellService.createSchedulingCall(patientData.phone, dynamicVariables);
     
-    logger.info('Outbound call triggered successfully', {
+    logger.info('Webhook processed successfully (Retell call disabled)', {
       patientId: redoxPatientId,
       eventType: bundle.Meta?.EventType
     });
