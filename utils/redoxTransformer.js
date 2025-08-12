@@ -39,6 +39,24 @@ class RedoxTransformer {
     return params;
   }
 
+  static createPatientSearchByDobNameParams(birthDate, given, family) {
+    const params = {};
+    
+    if (birthDate) {
+      params["birthdate"] = birthDate;
+    }
+    
+    if (given) {
+      params["given"] = given;
+    }
+    
+    if (family) {
+      params["family"] = family;
+    }
+    
+    return params;
+  }
+
   static createSlotSearchParams(location, serviceType, startTime) {
     const params = {};
 
@@ -262,6 +280,72 @@ class RedoxTransformer {
 
     // Return only the latest appointment (first after sorting)
     return appointments.length > 0 ? [appointments[0]] : [];
+  }
+
+  static transformPatientWithAppointmentDetails(patientResponse, appointmentResponse) {
+    // Extract the first patient from the search response
+    if (!patientResponse || !patientResponse.entry || patientResponse.entry.length === 0) {
+      return null;
+    }
+
+    // Get the first patient entry
+    const patientEntry = patientResponse.entry.find(
+      (entry) => entry.resource && entry.resource.resourceType === "Patient"
+    );
+
+    if (!patientEntry) {
+      return null;
+    }
+
+    const patient = patientEntry.resource;
+
+    // Extract patient name
+    const name = patient.name?.[0];
+    const fullName = name
+      ? `${name.given?.[0] || ""} ${name.family || ""}`.trim()
+      : "Unknown";
+
+    // Extract insurance information
+    const insuranceContact = patient.contact?.find(
+      (contact) => contact.relationship?.[0]?.coding?.[0]?.code === "I"
+    );
+    const insuranceName = insuranceContact?.name?.text || "Flores-Rivera";
+
+    // Extract insurance member ID
+    const insuranceMemberIdIdentifier = patient.identifier?.find(
+      (identifier) =>
+        identifier.system === "urn:redox:flow-ai:insurance" ||
+        identifier.type?.coding?.[0]?.code === "MB"
+    );
+    const insuranceMemberId = insuranceMemberIdIdentifier?.value || null;
+
+    // Extract appointment details if available
+    let appointmentType = "";
+    let appointmentStatus = "";
+    
+    if (appointmentResponse && appointmentResponse.entry && appointmentResponse.entry.length > 0) {
+      const appointmentEntry = appointmentResponse.entry.find(
+        (entry) => entry.resource && entry.resource.resourceType === "Appointment"
+      );
+      
+      if (appointmentEntry) {
+        const appointment = appointmentEntry.resource;
+        appointmentType = appointment.appointmentType?.coding?.[0]?.code || "";
+        appointmentStatus = appointment.status || "";
+      }
+    }
+
+    // Return the patient object with all required fields
+    return {
+      patient_id: patient.id,
+      patient_name: fullName,
+      insurance_member_id: insuranceMemberId || "",
+      insurance_name: insuranceName || "",
+      appointment_type: appointmentType,
+      appointment_status: appointmentStatus,
+      location: "Allison Hill",
+      alternate_location: "Park Avenue"
+    };
   }
 
   static transformAppointmentCreateResponse(redoxResponse) {

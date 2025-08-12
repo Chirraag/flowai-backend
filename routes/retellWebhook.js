@@ -203,6 +203,15 @@ router.post("/webhook", async (req, res, next) => {
  *                   access_token:
  *                     type: string
  *                     description: Access token (can be in args or call context)
+ *                   birth_date:
+ *                     type: string
+ *                     description: Patient's date of birth (for find_patient)
+ *                   given:
+ *                     type: string
+ *                     description: Patient's first name (for find_patient)
+ *                   family:
+ *                     type: string
+ *                     description: Patient's last name (for find_patient)
  *     responses:
  *       200:
  *         description: Function call result
@@ -448,24 +457,26 @@ router.post("/function-call", async (req, res, next) => {
         logger.info("Processing find_patient function call");
 
         // Extract patient search parameters from args
-        const { birth_date, zip_code } = args;
+        const { birth_date, given, family } = args;
 
         // Validate required fields
-        if (!birth_date || !zip_code) {
+        if (!birth_date || !given || !family) {
           logger.warn("find_patient failed: missing required fields", {
             birth_date,
-            zip_code,
+            given,
+            family,
           });
           return res.status(400).json({
             success: false,
-            error: "Missing required fields: birth_date and zip_code are required",
+            error: "Missing required fields: birth_date, given, and family are required",
           });
         }
 
         // Create search parameters
-        const searchParams = RedoxTransformer.createPatientSearchByDobZipParams(
+        const searchParams = RedoxTransformer.createPatientSearchByDobNameParams(
           birth_date,
-          zip_code,
+          given,
+          family,
         );
 
         // Execute patient search through Redox API
@@ -477,22 +488,68 @@ router.post("/function-call", async (req, res, next) => {
           accessToken
         );
 
-        // Transform response to get simplified patient list
-        const patients = RedoxTransformer.transformPatientSearchByDobZipResponse(
+        // Check if patient found
+        if (!searchResponse || !searchResponse.entry || searchResponse.entry.length === 0) {
+          logger.info("No patient found", {
+            birth_date,
+            given,
+            family,
+          });
+          
+          result = {
+            success: true,
+            patient_found: false,
+            patient: null
+          };
+          break;
+        }
+
+        // Get the first patient's ID for appointment search
+        const firstPatientEntry = searchResponse.entry.find(
+          (entry) => entry.resource && entry.resource.resourceType === "Patient"
+        );
+        const patientId = firstPatientEntry?.resource?.id;
+
+        let appointmentResponse = null;
+        
+        // Search for appointments if patient found
+        if (patientId) {
+          try {
+            const appointmentSearchParams = RedoxTransformer.createAppointmentSearchParams(patientId);
+            appointmentResponse = await RedoxAPIService.makeRequest(
+              "POST",
+              "/Appointment/_search",
+              null,
+              appointmentSearchParams,
+              accessToken
+            );
+          } catch (appointmentError) {
+            logger.warn("Failed to fetch appointments for patient", {
+              error: appointmentError.message,
+              patientId,
+            });
+            // Continue even if appointment fetch fails
+          }
+        }
+
+        // Transform patient and appointment data into the required format
+        const patientData = RedoxTransformer.transformPatientWithAppointmentDetails(
           searchResponse,
+          appointmentResponse
         );
 
-        logger.info("Patient search by DOB and zip completed", {
-          patientsFound: patients.length,
+        logger.info("Patient search by DOB and name completed", {
+          patientFound: patientData !== null,
           birth_date,
-          zip_code,
+          given,
+          family,
         });
 
-        // Return the patients list as the result
+        // Return the patient data
         result = {
           success: true,
-          patients: patients,
-          count: patients.length,
+          patient_found: patientData !== null,
+          patient: patientData
         };
         break;
       }
