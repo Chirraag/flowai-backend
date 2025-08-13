@@ -343,8 +343,8 @@ class RedoxTransformer {
       insurance_name: insuranceName || "",
       appointment_type: appointmentType,
       appointment_status: appointmentStatus,
-      location: "Allison Hill",
-      alternate_location: "Park Avenue"
+      location: "Plantation, Florida",
+      alternate_location: ""
     };
   }
 
