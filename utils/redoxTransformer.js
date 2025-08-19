@@ -99,48 +99,23 @@ class RedoxTransformer {
         .filter((entry) => entry.resource.status === "free")
         .map((entry) => {
           const slot = entry.resource;
+          const startDate = new Date(slot.start);
+          const dayOfWeek = startDate.toLocaleDateString('en-US', { weekday: 'long' });
+          
           return {
             slotId: slot.id,
             startTime: slot.start,
             endTime: slot.end,
+            dayOfWeek: dayOfWeek,
             serviceType: slot.serviceType?.[0]?.text || null,
             status: slot.status,
           };
         })
-        .filter((slot) => new Date(slot.startTime) > now); // Only future slots
+        .filter((slot) => new Date(slot.startTime) > now) // Only future slots
+        .sort((a, b) => new Date(a.startTime) - new Date(b.startTime)) // Sort by startTime ascending
+        .slice(0, 10); // Limit to 10 slots
     }
 
-    // If no future slots found, return exactly 4 dummy slots
-    if (slots.length === 0) {
-      const timeSlots = [
-        { day: 1, hour: 10, minute: 0 }, // Tomorrow 10:00 AM
-        { day: 1, hour: 14, minute: 0 }, // Tomorrow 2:00 PM
-        { day: 2, hour: 9, minute: 30 }, // Day after 9:30 AM
-        { day: 3, hour: 18, minute: 0 }, // 3 days later 3:00 PM
-      ];
-
-      const serviceTypes = [
-        "General Consultation",
-        "Follow-up Visit",
-        "Routine Check-up",
-        "Specialist Consultation",
-        "General Consultation",
-      ];
-
-      slots = timeSlots.map((timeSlot, index) => {
-        const slotDate = new Date(now);
-        slotDate.setDate(now.getDate() + timeSlot.day);
-        slotDate.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
-
-        return {
-          slotId: `dummy-slot-${slotDate.getTime()}`,
-          startTime: slotDate.toISOString(),
-          endTime: new Date(slotDate.getTime() + 30 * 60 * 1000).toISOString(),
-          serviceType: serviceTypes[index],
-          status: "free",
-        };
-      });
-    }
 
     return slots;
   }
