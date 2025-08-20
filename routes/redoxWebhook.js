@@ -210,15 +210,15 @@ async function processSchedulingEvent(bundle, redoxPatientId, patientResource) {
       patient_dob: patientData.dateOfBirth || '',
       patient_zip: patientData.zipCode || '',
       patient_address: patientData.address || '',
-      insurance_name: patientData.insuranceName || '',
+      patient_insurance_name: patientData.insuranceName || '',
       insurance_type: patientData.insuranceType || 'PPO',
-      insurance_member_id: patientData.insuranceMemberId || 'MEM123456789',
+      patient_insurance_member_id: patientData.insuranceMemberId || 'MEM123456789',
       
       // Appointment details
-      appointment_id: appointment?.appointmentId || '',
-      appointment_type: appointment?.appointmentType || '',
+      patient_appointment_id: appointment?.appointmentId || '',
+      patient_appointment_type: appointment?.appointmentType || '',
       appointment_start: appointment?.startTime || '',
-      appointment_status: appointment?.status || '',
+      patient_appointment_status: appointment?.status || '',
       appointment_description: appointment?.description || '',
       
       // Access token for subsequent calls

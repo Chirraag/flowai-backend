@@ -314,11 +314,11 @@ class RedoxTransformer {
     return {
       patient_id: patient.id,
       patient_name: fullName,
-      insurance_member_id: insuranceMemberId || "",
-      insurance_name: insuranceName || "",
-      appointment_type: appointmentType,
-      appointment_status: appointmentStatus,
-      location: "Plantation, Florida",
+      patient_insurance_member_id: insuranceMemberId || "",
+      patient_insurance_name: insuranceName || "",
+      patient_appointment_type: appointmentType,
+      patient_appointment_status: appointmentStatus,
+      provider_location: "Plantation, Florida",
       alternate_location: ""
     };
   }

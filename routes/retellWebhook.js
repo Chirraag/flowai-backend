@@ -129,19 +129,19 @@ router.post("/webhook", async (req, res, next) => {
       dynamicVariables.patient_dob = patientData.dateOfBirth || "";
       dynamicVariables.patient_zip = patientData.zipCode || "";
       dynamicVariables.patient_address = patientData.address || "";
-      dynamicVariables.insurance_name = patientData.insuranceName || "";
+      dynamicVariables.patient_insurance_name = patientData.insuranceName || "";
       dynamicVariables.insurance_type = patientData.insuranceType || "";
-      dynamicVariables.insurance_member_id =
+      dynamicVariables.patient_insurance_member_id =
         patientData.insuranceMemberId || "";
     }
 
     // Add appointment details as separate dynamic variables (all as strings)
     if (appointments.length > 0) {
       const appointment = appointments[0];
-      dynamicVariables.appointment_id = appointment.appointmentId || "";
-      dynamicVariables.appointment_type = appointment.appointmentType || "";
+      dynamicVariables.patient_appointment_id = appointment.appointmentId || "";
+      dynamicVariables.patient_appointment_type = appointment.appointmentType || "";
       dynamicVariables.appointment_start = appointment.startTime || "";
-      dynamicVariables.appointment_status = appointment.status || "";
+      dynamicVariables.patient_appointment_status = appointment.status || "";
       dynamicVariables.appointment_description = appointment.description || "";
     }
 
@@ -1069,15 +1069,15 @@ router.post("/trigger-intake-call", authMiddleware, async (req, res, next) => {
       patient_dob: patientData.dateOfBirth || "",
       patient_zip: patientData.zipCode || "",
       patient_address: patientData.address || "",
-      insurance_name: patientData.insuranceName || "",
+      patient_insurance_name: patientData.insuranceName || "",
       insurance_type: patientData.insuranceType || "",
-      insurance_member_id: patientData.insuranceMemberId || "",
+      patient_insurance_member_id: patientData.insuranceMemberId || "",
 
       // Appointment details if available
-      appointment_id: appointment?.appointmentId || "",
-      appointment_type: appointment?.appointmentType || "",
+      patient_appointment_id: appointment?.appointmentId || "",
+      patient_appointment_type: appointment?.appointmentType || "",
       appointment_start: appointment?.startTime || "",
-      appointment_status: appointment?.status || "",
+      patient_appointment_status: appointment?.status || "",
       appointment_description: appointment?.description || "",
     };
 
