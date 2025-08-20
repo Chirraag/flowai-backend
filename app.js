@@ -19,6 +19,7 @@ const redoxWebhookRoutes = require("./routes/redoxWebhook");
 const retellAgentRoutes = require("./routes/retellAgent");
 const documentReferenceRoutes = require("./routes/documentReference");
 const oauthRoutes = require("./routes/oauth");
+const callbackScheduler = require("./services/callbackScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -170,6 +171,23 @@ app.listen(PORT, () => {
   logger.info(`Flow AI API running on port ${PORT}`);
   logger.info(`API Documentation: http://localhost:${PORT}/api-docs`);
   logger.info(`Health Check: http://localhost:${PORT}/health`);
+  
+  // Start the callback scheduler
+  callbackScheduler.start();
+  logger.info("Callback scheduler started");
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM signal received: closing HTTP server");
+  callbackScheduler.stop();
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  logger.info("SIGINT signal received: closing HTTP server");
+  callbackScheduler.stop();
+  process.exit(0);
 });
 
 module.exports = app;

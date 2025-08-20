@@ -887,6 +887,120 @@ router.post("/call/update", async (req, res, next) => {
         }
       }
 
+      // 4. Check for transfer attempts and scheduled callbacks
+      const isTransferAttempted = call.call_analysis?.custom_analysis_data?.is_transfer_attempted;
+      const scheduledCallbackTime = call.call_analysis?.custom_analysis_data?.scheduled_callback_time;
+      const patientId = call.retell_llm_dynamic_variables?.patient_id;
+
+      if (scheduledCallbackTime && patientId) {
+        // Determine agent callback number from call numbers
+        const agentNumbers = ['+16018846979', '+14088728200'];
+        let agentCallbackNumber = null;
+        
+        if (agentNumbers.includes(call.to_number)) {
+          agentCallbackNumber = call.to_number;
+        } else if (agentNumbers.includes(call.from_number)) {
+          agentCallbackNumber = call.from_number;
+        }
+
+        if (!agentCallbackNumber) {
+          logger.warn("Cannot determine agent callback number - skipping callback processing", {
+            call_id: call.call_id,
+            to_number: call.to_number,
+            from_number: call.from_number,
+          });
+        } else {
+          logger.info("Processing callback request", {
+            call_id: call.call_id,
+            is_transfer_attempted: isTransferAttempted,
+            scheduled_callback_time: scheduledCallbackTime,
+            agent_callback_number: agentCallbackNumber,
+            patient_id: patientId,
+          });
+
+          if (isTransferAttempted === "true" || isTransferAttempted === true) {
+            // Create DocumentReference for transfer attempt
+            try {
+              const accessToken =
+                call.retell_llm_dynamic_variables?.access_token ||
+                (await authService.getAccessToken());
+
+              const transferMessage = `Patient requested callback from human agent at ${scheduledCallbackTime}`;
+
+              const documentBundle =
+                RedoxTransformer.createDocumentReferenceBundle(
+                  patientId,
+                  transferMessage,
+                  {
+                    callId: call.call_id,
+                    agentId: call.agent_id,
+                    callTimestamp: new Date(call.start_timestamp).toISOString(),
+                    transferAttempted: true,
+                    scheduledCallbackTime: scheduledCallbackTime,
+                  },
+                );
+
+              const documentResponse = await RedoxAPIService.makeRequest(
+                "POST",
+                "/DocumentReference/$documentreference-create",
+                documentBundle,
+                null,
+                accessToken,
+              );
+
+              const documentResult =
+                RedoxTransformer.transformAppointmentCreateResponse(
+                  documentResponse,
+                );
+
+              logger.info("DocumentReference created for transfer attempt", {
+                call_id: call.call_id,
+                patient_id: patientId,
+                document_id: documentResult.generatedId,
+                scheduled_callback_time: scheduledCallbackTime,
+              });
+            } catch (docError) {
+              logger.error("Error creating DocumentReference for transfer attempt", {
+                call_id: call.call_id,
+                patient_id: patientId,
+                error: docError.message,
+              });
+            }
+          } else {
+            // is_transfer_attempted is false, store in scheduled_callbacks table
+            try {
+              const insertCallbackQuery = `
+                INSERT INTO scheduled_callbacks (
+                  patient_id,
+                  agent_callback_number,
+                  scheduled_time,
+                  status
+                ) VALUES ($1, $2, $3, 'pending')
+              `;
+
+              await db.query(insertCallbackQuery, [
+                patientId,
+                agentCallbackNumber,
+                scheduledCallbackTime,
+              ]);
+
+              logger.info("Scheduled callback stored in database", {
+                call_id: call.call_id,
+                patient_id: patientId,
+                agent_callback_number: agentCallbackNumber,
+                scheduled_time: scheduledCallbackTime,
+              });
+            } catch (dbError) {
+              logger.error("Error storing scheduled callback", {
+                call_id: call.call_id,
+                patient_id: patientId,
+                error: dbError.message,
+              });
+            }
+          }
+        }
+      }
+
       // Commit the transaction
       await db.query("COMMIT");
 
@@ -1141,6 +1255,190 @@ router.get("/call-storage/stats", authMiddleware, (req, res) => {
     success: true,
     data: stats,
   });
+});
+
+/**
+ * @swagger
+ * /api/v1/retell/callbacks/stats:
+ *   get:
+ *     summary: Get scheduled callbacks statistics
+ *     tags: [Retell Callbacks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Callback statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pending:
+ *                       type: number
+ *                       description: Number of pending callbacks
+ *                     completed:
+ *                       type: number
+ *                       description: Number of completed callbacks
+ *                     failed:
+ *                       type: number
+ *                       description: Number of failed callbacks
+ *                     upcomingInNext5Minutes:
+ *                       type: number
+ *                       description: Number of callbacks scheduled in next 5 minutes
+ */
+router.get("/callbacks/stats", authMiddleware, async (req, res, next) => {
+  try {
+    const callbackScheduler = require("../services/callbackScheduler");
+    const stats = await callbackScheduler.getStats();
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    logger.error("Error fetching callback stats", { error: error.message });
+    next(error);
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/retell/callbacks/scheduler/status:
+ *   get:
+ *     summary: Get callback scheduler status
+ *     tags: [Retell Callbacks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Scheduler status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     running:
+ *                       type: boolean
+ *                       description: Whether the scheduler is running
+ *                     processing:
+ *                       type: boolean
+ *                       description: Whether callbacks are currently being processed
+ *                     intervalMinutes:
+ *                       type: number
+ *                       description: Interval in minutes between processing runs
+ */
+router.get("/callbacks/scheduler/status", authMiddleware, (req, res) => {
+  const callbackScheduler = require("../services/callbackScheduler");
+  const status = callbackScheduler.getStatus();
+  res.json({
+    success: true,
+    data: status,
+  });
+});
+
+/**
+ * @swagger
+ * /api/v1/retell/callbacks/list:
+ *   get:
+ *     summary: List scheduled callbacks
+ *     tags: [Retell Callbacks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, completed, failed]
+ *         description: Filter by status
+ *       - in: query
+ *         name: patient_id
+ *         schema:
+ *           type: string
+ *         description: Filter by patient ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *         description: Maximum number of results
+ *     responses:
+ *       200:
+ *         description: List of scheduled callbacks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       patient_id:
+ *                         type: string
+ *                       agent_callback_number:
+ *                         type: string
+ *                       scheduled_time:
+ *                         type: string
+ *                         format: date-time
+ *                       status:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       processed_at:
+ *                         type: string
+ *                         format: date-time
+ *                       error_message:
+ *                         type: string
+ */
+router.get("/callbacks/list", authMiddleware, async (req, res, next) => {
+  try {
+    const { status, patient_id, limit = 100 } = req.query;
+    
+    let query = "SELECT * FROM scheduled_callbacks WHERE 1=1";
+    const params = [];
+    let paramCount = 0;
+
+    if (status) {
+      paramCount++;
+      query += ` AND status = $${paramCount}`;
+      params.push(status);
+    }
+
+    if (patient_id) {
+      paramCount++;
+      query += ` AND patient_id = $${paramCount}`;
+      params.push(patient_id);
+    }
+
+    query += ` ORDER BY scheduled_time DESC LIMIT $${paramCount + 1}`;
+    params.push(parseInt(limit));
+
+    const result = await db.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error("Error listing callbacks", { error: error.message });
+    next(error);
+  }
 });
 
 module.exports = router;
