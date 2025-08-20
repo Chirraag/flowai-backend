@@ -946,6 +946,10 @@ router.post("/call/update", async (req, res, next) => {
       const scheduledCallbackTime = call.call_analysis?.custom_analysis_data?.scheduled_callback_time;
       const patientId = call.retell_llm_dynamic_variables?.patient_id;
 
+      console.log("isTransferAttempted", isTransferAttempted);
+      console.log("scheduledCallbackTime", scheduledCallbackTime);
+      console.log("patientId", patientId);
+
       if (scheduledCallbackTime && patientId) {
         // Determine agent callback number from call numbers
         const agentNumbers = ['+16018846979', '+14088728200'];
