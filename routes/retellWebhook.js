@@ -671,22 +671,39 @@ router.post("/call/update", async (req, res, next) => {
       });
     }
 
-    const recepientEmail = call.retell_llm_dynamic_variables.patient_email;
-
-    const emailData = {
-      from: "myflow@no-reply.vexalink.com",
-      to: recepientEmail,
-      subject: `Appointment Confirmation`,
-      text: `Your appointment has been confirmed`,
-    };
-
-    // Send email using Resend
-    const { data, error } = await resend.emails.send(emailData);
-
     if (!call || !call.call_id) {
       return res.status(400).json({
         success: false,
         error: "Missing call data or call_id",
+      });
+    }
+
+    // Send confirmation email if patient email is available (non-blocking)
+    try {
+      const recepientEmail = call.retell_llm_dynamic_variables?.patient_email;
+      
+      if (recepientEmail) {
+        const emailData = {
+          from: "myflow@no-reply.vexalink.com",
+          to: recepientEmail,
+          subject: `Appointment Confirmation`,
+          text: `Your appointment has been confirmed`,
+        };
+
+        // Send email using Resend (non-blocking)
+        resend.emails.send(emailData).catch(emailError => {
+          logger.error("Failed to send confirmation email", {
+            error: emailError.message,
+            recipient: recepientEmail,
+            call_id: call.call_id
+          });
+        });
+      }
+    } catch (emailError) {
+      // Log error but don't fail the request
+      logger.error("Error processing confirmation email", {
+        error: emailError.message,
+        call_id: call.call_id
       });
     }
 
