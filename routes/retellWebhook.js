@@ -8,8 +8,36 @@ const logger = require("../utils/logger");
 const db = require("../db/connection");
 const { Resend } = require("resend");
 const callIdStorage = require("../utils/callIdStorage");
+const axios = require("axios");
 
 const authService = new AuthService();
+
+// Helper function to forward events to Cekura observability
+async function forwardToCekuraObservability(eventData) {
+  try {
+    const response = await axios.post(
+      "https://api.cekura.ai/observability/v1/retell/observe/",
+      eventData,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 5000, // 5 second timeout
+      }
+    );
+    
+    logger.info("Event forwarded to Cekura observability", {
+      status: response.status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    // Log error but don't fail the main request
+    logger.error("Failed to forward event to Cekura observability", {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
 
 // Initialize Resend with API key
 const resend = new Resend("re_RqyutRoZ_FzgFQ1SVV8qd7RAUmjX4o79B");
@@ -40,6 +68,9 @@ const resend = new Resend("re_RqyutRoZ_FzgFQ1SVV8qd7RAUmjX4o79B");
  */
 router.post("/webhook", async (req, res, next) => {
   try {
+    // Forward a copy of the event to Cekura observability (non-blocking)
+    forwardToCekuraObservability(req.body);
+    
     // Log complete webhook request body
     logger.info("=== RETELL WEBHOOK RECEIVED ===", {
       requestBody: JSON.stringify(req.body, null, 2),
@@ -218,6 +249,9 @@ router.post("/webhook", async (req, res, next) => {
  */
 router.post("/function-call", async (req, res, next) => {
   try {
+    // Forward a copy of the event to Cekura observability (non-blocking)
+    forwardToCekuraObservability(req.body);
+    
     // Log function call request body (excluding transcript and transcript_object for cleaner logs)
     const logBody = {
       ...req.body,
@@ -623,6 +657,9 @@ router.post("/function-call", async (req, res, next) => {
  */
 router.post("/call/update", async (req, res, next) => {
   try {
+    // Forward a copy of the event to Cekura observability (non-blocking)
+    forwardToCekuraObservability(req.body);
+    
     console.log("hit");
     const { event, call } = req.body;
 
